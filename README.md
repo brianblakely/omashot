@@ -4,23 +4,11 @@ Omasnap is a screenshot and screen-recording overlay inspired by macOS and Spect
 
 ## Install
 
-Install Omasnap disabled so you can review it before it runs:
-
 ```bash
-omarchy plugin add https://github.com/brianblakely/omasnap.git --no-enable
+omarchy plugin add https://github.com/brianblakely/omasnap.git
 ```
 
-Review the installed checkout:
-
-```bash
-omarchy plugin edit b.omasnap
-```
-
-Then enable it:
-
-```bash
-omarchy plugin enable b.omasnap
-```
+Accept the prompt to enable Omasnap during installation.
 
 ## Usage
 
@@ -54,7 +42,7 @@ Optional integrations include `hyprpicker`, `omarchy-notification-send` or `noti
 
 Omasnap stores plugin settings inline in `~/.config/omarchy/shell.json` and recent capture state in `${XDG_STATE_HOME:-$HOME/.local/state}/omasnap/state.json`. It creates short-lived freeze images under `$XDG_RUNTIME_DIR` or `/tmp` and uses `/tmp/omarchy-screenrecord-filename` while recording. Its keep-loaded service polls recording status every 1.5 seconds. Omasnap does not use the network.
 
-Plugins run unsandboxed inside `omarchy-shell`; review the checkout before enabling it.
+Plugins run unsandboxed inside `omarchy-shell`; review the source before installing it.
 
 ## Update
 
