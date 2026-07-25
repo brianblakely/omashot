@@ -34,22 +34,8 @@ o.bind("SUPER + SHIFT + F6", "Omasnap record", "omarchy-shell b.omasnap record")
 o.bind("SUPER + SHIFT + CTRL + F6", "Omasnap stop recording", "omarchy-shell b.omasnap stopRecording")
 ```
 
-## Commands and files
-
-Core capture uses `bash`, `grim`, `jq`, and `hyprctl`. Selection and clipboard features use `slurp` and `wl-copy`. Recording uses `omarchy-capture-screenrecording` and `gpu-screen-recorder`; webcam recording also uses `v4l2-ctl` and `mpv`.
-
-Optional integrations include `hyprpicker`, `omarchy-notification-send` or `notify-send`, `xdg-open`, and the configured screenshot editor (`tensaku-edit` by default).
-
-Omasnap stores plugin settings inline in `~/.config/omarchy/shell.json` and recent capture state in `${XDG_STATE_HOME:-$HOME/.local/state}/omasnap/state.json`. It creates short-lived freeze images under `$XDG_RUNTIME_DIR` or `/tmp` and uses `/tmp/omarchy-screenrecord-filename` while recording. Its keep-loaded service polls recording status every 1.5 seconds. Omasnap does not use the network.
-
-Plugins run unsandboxed inside `omarchy-shell`; review the source before installing it.
-
 ## Update
 
 ```bash
 omarchy plugin update b.omasnap
 ```
-
-## License
-
-[MIT](LICENSE)
