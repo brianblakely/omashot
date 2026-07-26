@@ -284,6 +284,7 @@ snap_tiny_selection() {
 
 FREEZE_PID=""
 NO_HW_CURSORS=""
+STOP_OUTPUT_FILE=""
 
 start_freeze() {
   if command -v hyprpicker >/dev/null 2>&1; then
@@ -326,6 +327,7 @@ restore_cursor_mode() {
 cleanup() {
   stop_freeze
   restore_cursor_mode
+  [[ -n $STOP_OUTPUT_FILE ]] && rm -f -- "$STOP_OUTPUT_FILE"
 }
 
 trap cleanup EXIT
@@ -559,6 +561,18 @@ refresh_recording_indicator() {
   fi
 }
 
+open_recording_in_omacut() {
+  local file="$1"
+  [[ -f $file && -s $file ]] || return 0
+  command -v omacut >/dev/null 2>&1 || return 0
+
+  if command -v setsid >/dev/null 2>&1 && command -v uwsm-app >/dev/null 2>&1; then
+    setsid uwsm-app -- omacut "$file" </dev/null >/dev/null 2>&1 &
+  else
+    omacut "$file" </dev/null >/dev/null 2>&1 &
+  fi
+}
+
 record_geometry() {
   require_command gpu-screen-recorder
 
@@ -630,7 +644,25 @@ record_screen() {
 
 stop_recording() {
   require_command omarchy-capture-screenrecording
-  omarchy-capture-screenrecording --stop-recording
+  local filename status
+  filename=$(cat "$RECORDING_FILE" 2>/dev/null)
+  STOP_OUTPUT_FILE=$(mktemp "$TMP_DIR/omasnap-stop.XXXXXX") ||
+    fail "could not create temporary stop output"
+
+  omarchy-capture-screenrecording --stop-recording >"$STOP_OUTPUT_FILE"
+  status=$?
+  cat "$STOP_OUTPUT_FILE"
+
+  if ((status == 0)) &&
+    [[ -n $filename && -f $filename && -s $filename ]] &&
+    grep -Fqx -- "$filename" "$STOP_OUTPUT_FILE"; then
+    write_state "" "" "$filename"
+    open_recording_in_omacut "$filename"
+  fi
+
+  rm -f -- "$STOP_OUTPUT_FILE"
+  STOP_OUTPUT_FILE=""
+  return "$status"
 }
 
 status_json() {

@@ -1,8 +1,10 @@
 # Omasnap
 
-Omasnap is a screenshot and screen-recording overlay inspired by macOS and Spectacle. It saves screenshots to the configured XDG directory, Pictures by default, and recordings to Videos by default.
+Omasnap is a screenshot and screen-recording overlay inspired by macOS and Spectacle. It saves screenshots to the configured XDG directory, Pictures by default, and recordings to Videos by default. Completed recordings open automatically in Omacut.
 
 ## Install
+
+Review the [Omasnap source](https://github.com/brianblakely/omasnap), then install it:
 
 ```bash
 omarchy plugin add https://github.com/brianblakely/omasnap.git
