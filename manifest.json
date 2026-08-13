@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "id": "b.omasnap",
-  "name": "Omasnap",
+  "id": "b.omashot",
+  "name": "Omashot",
   "version": "0.0.11",
   "author": "Brian Blakely",
   "description": "Screenshot and screen recording overlay for Omarchy",
