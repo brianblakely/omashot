@@ -1,11 +1,11 @@
-# Omasnap
+# Omashot
 
-Omasnap is a screenshot and screen-recording overlay inspired by macOS and Spectacle. It saves screenshots to the configured XDG directory: `Pictures` by default, and recordings to `Videos` by default. Completed recordings open automatically in Omacut.
+Omashot is a screenshot and screen-recording overlay inspired by macOS and Spectacle. It saves screenshots to the configured XDG directory: `Pictures` by default, and recordings to `Videos` by default. Completed recordings open automatically in Omacut.
 
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/brianblakely/omasnap.git
+omarchy plugin add https://github.com/brianblakely/omashot.git
 ```
 
 ## Usage
@@ -21,18 +21,18 @@ omarchy plugin add https://github.com/brianblakely/omasnap.git
 
 ```lua
 hl.unbind("PRINT")
-o.bind("PRINT", "Omasnap", "omarchy-shell b.omasnap show")
-o.bind("SUPER + SHIFT + F3", "Omasnap capture screen", "omarchy-shell b.omasnap captureScreen")
-o.bind("SUPER + SHIFT + CTRL + F3", "Omasnap capture window", "omarchy-shell b.omasnap captureWindow")
-o.bind("SUPER + SHIFT + F4", "Omasnap capture to file", "omarchy-shell b.omasnap captureToFile")
-o.bind("SUPER + SHIFT + CTRL + F4", "Omasnap capture to clipboard", "omarchy-shell b.omasnap captureToClipboard")
-o.bind("SUPER + SHIFT + F5", "Omasnap", "omarchy-shell b.omasnap show")
-o.bind("SUPER + SHIFT + F6", "Omasnap record", "omarchy-shell b.omasnap record")
-o.bind("SUPER + SHIFT + CTRL + F6", "Omasnap stop recording", "omarchy-shell b.omasnap stopRecording")
+o.bind("PRINT", "Omashot", "omarchy-shell b.omashot show")
+o.bind("SUPER + SHIFT + F3", "Omashot capture screen", "omarchy-shell b.omashot captureScreen")
+o.bind("SUPER + SHIFT + CTRL + F3", "Omashot capture window", "omarchy-shell b.omashot captureWindow")
+o.bind("SUPER + SHIFT + F4", "Omashot capture to file", "omarchy-shell b.omashot captureToFile")
+o.bind("SUPER + SHIFT + CTRL + F4", "Omashot capture to clipboard", "omarchy-shell b.omashot captureToClipboard")
+o.bind("SUPER + SHIFT + F5", "Omashot", "omarchy-shell b.omashot show")
+o.bind("SUPER + SHIFT + F6", "Omashot record", "omarchy-shell b.omashot record")
+o.bind("SUPER + SHIFT + CTRL + F6", "Omashot stop recording", "omarchy-shell b.omashot stopRecording")
 ```
 
 ## Update
 
 ```bash
-omarchy plugin update b.omasnap
+omarchy plugin update b.omashot
 ```
