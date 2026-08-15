@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Window
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -623,7 +624,6 @@ Item {
     property string value: ""
     property var options: []
     property int popupWidth: Style.space(160)
-    property var boundaryItem: null
 
     signal changed(string value)
 
@@ -658,23 +658,25 @@ Item {
     Behavior on color { ColorAnimation { duration: 100 } }
 
     function positionPopup() {
+      if (!popup.parent) return
+
       var gap = Style.spacing.xxs
-      popup.x = 0
-      popup.y = iconDropdown.height + gap
-      if (!boundaryItem) return
+      var position = iconDropdown.mapToItem(popup.parent, 0, 0)
+      var popupHeight = popup.height > 0 ? popup.height : popup.implicitHeight
+      var availableWidth = popup.parent.width
+      var availableHeight = popup.parent.height
+      var belowY = position.y + iconDropdown.height + gap
+      var aboveY = position.y - popupHeight - gap
+      var preferredX = position.x
+      var preferredY = belowY
 
-      var position = iconDropdown.mapToItem(boundaryItem, 0, 0)
-      var openAbove = position.y + iconDropdown.height + gap + popup.implicitHeight > boundaryItem.height
-      var alignRight = position.x + popup.width > boundaryItem.width
-      var preferredX = alignRight ? iconDropdown.width - popup.width : 0
-      var preferredY = openAbove ? -popup.implicitHeight - gap : iconDropdown.height + gap
-      var minimumX = -position.x
-      var maximumX = boundaryItem.width - position.x - popup.width
-      var minimumY = -position.y
-      var maximumY = boundaryItem.height - position.y - popup.implicitHeight
+      if (preferredX + popup.width > availableWidth)
+        preferredX = position.x + iconDropdown.width - popup.width
+      if (belowY + popupHeight > availableHeight)
+        preferredY = aboveY
 
-      popup.x = Math.max(minimumX, Math.min(maximumX, preferredX))
-      popup.y = Math.max(minimumY, Math.min(maximumY, preferredY))
+      popup.x = Math.max(0, Math.min(availableWidth - popup.width, preferredX))
+      popup.y = Math.max(0, Math.min(availableHeight - popupHeight, preferredY))
     }
 
     Row {
@@ -716,11 +718,12 @@ Item {
 
     Popup {
       id: popup
+      parent: iconDropdown.Window.window ? iconDropdown.Window.window.contentItem : iconDropdown
       x: 0
-      y: iconDropdown.height + Style.spacing.xxs
+      y: 0
       width: Math.min(iconDropdown.popupWidth,
-                      iconDropdown.boundaryItem && iconDropdown.boundaryItem.width > 0
-                        ? iconDropdown.boundaryItem.width
+                      parent && parent.width > 0
+                        ? parent.width
                         : iconDropdown.popupWidth)
       implicitHeight: Math.min(iconDropdown.options.length * Style.spacing.popupRowHeight + Math.max(0, iconDropdown.options.length - 1) * Style.spacing.labelGap + Style.spacing.xxs,
                                Style.spacing.popupRowHeight * 8 + 7 * Style.spacing.labelGap + Style.spacing.xxs)
@@ -736,8 +739,10 @@ Item {
       }
 
       onOpened: {
+        iconDropdown.positionPopup()
         optionList.currentIndex = Math.max(0, optionList.indexOfValue(iconDropdown.value))
         optionList.forceActiveFocus()
+        Qt.callLater(function() { iconDropdown.positionPopup() })
       }
 
       contentItem: ListView {
@@ -1185,7 +1190,6 @@ Item {
           iconText: "󰈙"
           width: toolbar.dropdownButtonWidth
           popupWidth: Style.space(170)
-          boundaryItem: panel
           value: service ? service.outputMode : "file-and-clipboard"
           options: [
             { value: "file-and-clipboard", label: "File + Clipboard" },
@@ -1201,7 +1205,6 @@ Item {
           iconText: "󰉋"
           width: toolbar.dropdownButtonWidth
           popupWidth: Style.space(150)
-          boundaryItem: panel
           value: service ? service.saveLocation : "pictures"
           options: [
             { value: "pictures", label: "Pictures" },
@@ -1217,7 +1220,6 @@ Item {
           iconText: "󰔟"
           width: toolbar.dropdownButtonWidth
           popupWidth: Style.space(100)
-          boundaryItem: panel
           value: service ? String(service.timerSeconds) : "0"
           options: [
             { value: "0", label: "None" },
