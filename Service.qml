@@ -315,7 +315,7 @@ Item {
   GlobalShortcut {
     appid: root.pluginId
     name: "capture-selection"
-    description: "Omasnap capture selection"
+    description: "Omasnap capture region"
     onPressed: root.captureSelection()
   }
 
@@ -336,7 +336,7 @@ Item {
   GlobalShortcut {
     appid: root.pluginId
     name: "copy-selection"
-    description: "Omasnap copy selection"
+    description: "Omasnap copy region"
     onPressed: root.copySelection()
   }
 
@@ -350,7 +350,7 @@ Item {
   GlobalShortcut {
     appid: root.pluginId
     name: "record-selection"
-    description: "Omasnap record selection"
+    description: "Omasnap record region"
     onPressed: root.recordSelection()
   }
 

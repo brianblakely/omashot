@@ -689,8 +689,8 @@ open-last)
 help | -h | --help | *)
   cat <<USAGE
 Usage:
-  omasnap screenshot [screen|display|selection|window|active-window|last|smart] [options]
-  omasnap record [screen|selection] [options]
+  omasnap screenshot [screen|display|region|window|active-window|last|smart] [options]
+  omasnap record [screen|region] [options]
   omasnap stop-recording
   omasnap status
 

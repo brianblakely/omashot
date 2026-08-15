@@ -43,9 +43,9 @@ Item {
   readonly property var captureModes: [
     { value: "screen", label: "Screen", icon: "󰍹" },
     { value: "window", label: "Window", icon: "󰖲" },
-    { value: "selection", label: "Selection", icon: "󰆞" },
+    { value: "selection", label: "Region", icon: "󰆞" },
     { value: "record-screen", label: "Record Screen", icon: "󰑋" },
-    { value: "record-selection", label: "Record Selection", icon: "󰻂" }
+    { value: "record-selection", label: "Record Region", icon: "󰻂" }
   ]
 
   readonly property bool recordingMode: selectedMode === "record-screen" || selectedMode === "record-selection"
