@@ -659,8 +659,25 @@ Item {
 
     Behavior on color { ColorAnimation { duration: 100 } }
 
-    readonly property bool openAbove: boundaryItem
-      && iconDropdown.mapToItem(boundaryItem, 0, iconDropdown.height + Style.spacing.xxs).y + popup.implicitHeight > boundaryItem.height
+    function positionPopup() {
+      var gap = Style.spacing.xxs
+      popup.x = 0
+      popup.y = iconDropdown.height + gap
+      if (!boundaryItem) return
+
+      var position = iconDropdown.mapToItem(boundaryItem, 0, 0)
+      var openAbove = position.y + iconDropdown.height + gap + popup.implicitHeight > boundaryItem.height
+      var alignRight = position.x + popup.width > boundaryItem.width
+      var preferredX = alignRight ? iconDropdown.width - popup.width : 0
+      var preferredY = openAbove ? -popup.implicitHeight - gap : iconDropdown.height + gap
+      var minimumX = -position.x
+      var maximumX = boundaryItem.width - position.x - popup.width
+      var minimumY = -position.y
+      var maximumY = boundaryItem.height - position.y - popup.implicitHeight
+
+      popup.x = Math.max(minimumX, Math.min(maximumX, preferredX))
+      popup.y = Math.max(minimumY, Math.min(maximumY, preferredY))
+    }
 
     Row {
       id: dropdownRow
@@ -702,13 +719,17 @@ Item {
     Popup {
       id: popup
       x: 0
-      y: iconDropdown.openAbove ? -popup.implicitHeight - Style.spacing.xxs : iconDropdown.height + Style.spacing.xxs
-      width: iconDropdown.popupWidth
+      y: iconDropdown.height + Style.spacing.xxs
+      width: Math.min(iconDropdown.popupWidth,
+                      iconDropdown.boundaryItem && iconDropdown.boundaryItem.width > 0
+                        ? iconDropdown.boundaryItem.width
+                        : iconDropdown.popupWidth)
       implicitHeight: Math.min(iconDropdown.options.length * Style.spacing.popupRowHeight + Math.max(0, iconDropdown.options.length - 1) * Style.spacing.labelGap + Style.spacing.xxs,
                                Style.spacing.popupRowHeight * 8 + 7 * Style.spacing.labelGap + Style.spacing.xxs)
       padding: Style.spacing.hairline
       focus: true
 
+      onAboutToShow: iconDropdown.positionPopup()
       background: Rectangle {
         color: Color.menu.background
         border.color: Color.menu.border
