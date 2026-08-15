@@ -15,9 +15,9 @@ omarchy plugin add https://github.com/brianblakely/omashot.git
 * Press `Escape` during a recording to stop and save it.
 * Use the arrow keys or `HJKL` to move a region by one pixel.
 * Hold `Alt` while moving or resizing to use ten-pixel increments.
-* Hold `Shift` to grow the addressed edge.
-* Hold `Shift+Ctrl` to shrink from the edge opposite the pressed direction.
-* With the mouse, click the bar to select the screen, click a window to select it, or drag a region.
+* Hold `Shift` and a direction to grow a region.
+* Hold `Shift+Ctrl` and a direction to shrink a region.
+* With the `mouse`, click the Omarchy bar to select the screen, click a window to select it, or drag a region.
 
 ## Shortcuts
 

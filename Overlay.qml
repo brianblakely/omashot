@@ -95,6 +95,7 @@ Item {
       regionOnlyPicker = false
       if (payload.mode) selectedMode = String(payload.mode)
       else if (service && service.captureMode) selectedMode = service.captureMode
+      if (isRegionMode(selectedMode)) clearSelection()
     }
 
     if (service && typeof service.refreshStatus === "function") service.refreshStatus()
@@ -134,8 +135,22 @@ Item {
     dismiss()
   }
 
+  function isRegionMode(mode) {
+    return mode === "selection" || mode === "record-selection"
+  }
+
+  function clearSelection() {
+    hasSelection = false
+    selectionScreenName = ""
+    targetKind = ""
+    regionLocked = false
+    finishPointer()
+  }
+
   function setMode(mode) {
-    selectedMode = String(mode || "selection")
+    var nextMode = String(mode || "selection")
+    if (!pickerMode && isRegionMode(nextMode)) clearSelection()
+    selectedMode = nextMode
     if (service && typeof service.setCaptureMode === "function")
       service.setCaptureMode(selectedMode)
   }
@@ -500,9 +515,7 @@ Item {
     selectionScreenName = String(screenName || "")
 
     if (regionOnlyPicker) {
-      targetKind = "region"
-      regionLocked = true
-      beginPointer("draw", x, y, maxWidth, maxHeight, screenName)
+      beginRegionPointer("draw", x, y, maxWidth, maxHeight, screenName)
       return
     }
 
@@ -662,7 +675,7 @@ Item {
 
   function handleSelectionKey(event, maxWidth, maxHeight, screenName) {
     var direction = keyDirection(event.key)
-    if (direction === "") return false
+    if (direction === "" || !hasSelection) return false
 
     ensureSelection(maxWidth, maxHeight, screenName)
     if (pickerMode) {
@@ -1090,8 +1103,6 @@ Item {
     readonly property string currentScreenName: root.panelScreenName(panel)
 
     onVisibleChanged: {
-      if (visible && root.regionEditor && !root.pickerMode)
-        Qt.callLater(function() { root.ensureSelection(panel.width, panel.height, panel.currentScreenName) })
       if (visible && root.windowMode) root.refreshPickerTargets()
     }
     onWidthChanged: if (root.regionEditor && root.hasSelection) root.ensureSelection(panel.width, panel.height, panel.currentScreenName)
@@ -1100,8 +1111,8 @@ Item {
     Connections {
       target: root
       function onSelectedModeChanged() {
-        if (panel.visible && root.regionEditor && !root.pickerMode)
-          Qt.callLater(function() { root.ensureSelection(panel.width, panel.height, panel.currentScreenName) })
+        if (panel.visible && root.isRegionMode(root.selectedMode) && !root.pickerMode)
+          root.clearSelection()
         if (root.windowMode) {
           root.clearWindowTarget()
           root.refreshPickerTargets()
