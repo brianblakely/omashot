@@ -454,6 +454,29 @@ notify_capture() {
   fi
 }
 
+demo_screenshot() {
+  require_command grim
+
+  local output_dir filename filepath
+  output_dir=$(directory_for_location)
+  mkdir -p "$output_dir"
+  filename="omashot-demo-$(date +'%Y-%m-%d_%H-%M-%S').png"
+  filepath="$output_dir/$filename"
+
+  local grim_args=()
+  truthy "$INCLUDE_CURSOR" && grim_args+=(-c)
+
+  prepare_cursor_capture
+  if ! grim "${grim_args[@]}" "$filepath"; then
+    restore_cursor_mode
+    return 1
+  fi
+  restore_cursor_mode
+
+  printf '%s\n' "$filepath"
+  notify_capture "Omashot demo screenshot saved" "$filepath"
+}
+
 screenshot() {
   require_command grim
   require_command jq
@@ -741,6 +764,9 @@ open_last() {
 case "${COMMAND,,}" in
 screenshot | capture)
   screenshot
+  ;;
+demo-screenshot)
+  demo_screenshot
   ;;
 record | recording)
   record_screen

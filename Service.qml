@@ -26,6 +26,7 @@ Item {
 
   property bool recording: false
   property string lastStatus: "{}"
+  property var pendingScreenshotArgs: null
 
   function clampInt(value, min, max) {
     var parsed = parseInt(value, 10)
@@ -83,6 +84,21 @@ Item {
     return "ok"
   }
 
+  function runScreenshot(args, includeDemo) {
+    if (includeDemo !== true) {
+      hide()
+      return runDetached(args)
+    }
+
+    if (!helperPath) return "missing-helper"
+    if (demoScreenshotProc.running) return "busy"
+
+    pendingScreenshotArgs = args.slice(0)
+    demoScreenshotProc.command = ["bash", helperPath, "demo-screenshot"]
+    demoScreenshotProc.running = true
+    return "ok"
+  }
+
   function show() {
     if (shell && typeof shell.summon === "function")
       return shell.summon(pluginId, "{}") ? "ok" : "unknown"
@@ -120,22 +136,19 @@ Item {
     return showTargetPicker(action || "file", true)
   }
 
-  function screenshot(mode, outputOverride, freezePid) {
+  function screenshot(mode, outputOverride, freezePid, includeDemo) {
     var target = String(mode || captureMode || "selection")
     saveSettings({ captureMode: target })
-    hide()
-    return runDetached(["screenshot", target, captureContext("", "", outputOverride, freezePid)])
+    return runScreenshot(["screenshot", target, captureContext("", "", outputOverride, freezePid)], includeDemo)
   }
 
-  function screenshotGeometry(geometry, screenName, outputOverride, captureModeOverride, freezePid) {
+  function screenshotGeometry(geometry, screenName, outputOverride, captureModeOverride, freezePid, includeDemo) {
     var selectedGeometry = String(geometry || "").replace(/^\s+|\s+$/g, "")
     if (selectedGeometry === "") return "missing-geometry"
 
     saveSettings({ captureMode: String(captureModeOverride || "selection") })
-    hide()
-
-    return runDetached(["screenshot", "selection",
-      captureContext(selectedGeometry, screenName, outputOverride, freezePid)])
+    return runScreenshot(["screenshot", "selection",
+      captureContext(selectedGeometry, screenName, outputOverride, freezePid)], includeDemo)
   }
 
   function recordGeometry(geometry, screenName) {
@@ -268,6 +281,17 @@ Item {
     running: true
     repeat: true
     onTriggered: root.refreshStatus()
+  }
+
+  Process {
+    id: demoScreenshotProc
+
+    onExited: function() {
+      var args = root.pendingScreenshotArgs
+      root.pendingScreenshotArgs = null
+      root.hide()
+      if (args && args.length > 0) root.runDetached(args)
+    }
   }
 
   Process {

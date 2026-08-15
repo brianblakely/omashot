@@ -39,6 +39,7 @@ Item {
   property bool regionOnlyPicker: false
   property bool freezeOpenPending: false
   property bool freezeCapturePending: false
+  property bool demoCaptureHeld: false
   property var pickerClients: []
   property var pickerMonitors: []
 
@@ -104,6 +105,7 @@ Item {
     targetKind = ""
     regionLocked = false
     regionOnlyPicker = false
+    demoCaptureHeld = false
     finishPointer()
   }
 
@@ -153,15 +155,25 @@ Item {
     return String(pid)
   }
 
+  function isDemoCapturePress(event) {
+    if (!event) return false
+    if (event.key === Qt.Key_AsciiTilde || String(event.text || "") === "~") return true
+    return event.key === Qt.Key_QuoteLeft && (event.modifiers & Qt.ShiftModifier) !== 0
+  }
+
+  function isDemoCaptureRelease(event) {
+    return event && (event.key === Qt.Key_AsciiTilde || event.key === Qt.Key_QuoteLeft)
+  }
+
   function takeScreenshot(mode, outputOverride) {
     if (!service || typeof service.screenshot !== "function") return
-    return service.screenshot(mode, outputOverride || "", freezePidForScreenshot())
+    return service.screenshot(mode, outputOverride || "", freezePidForScreenshot(), demoCaptureHeld)
   }
 
   function takeGeometryScreenshot(geometry, screenName, outputOverride, captureModeOverride) {
     if (!service || typeof service.screenshotGeometry !== "function") return
     return service.screenshotGeometry(geometry, screenName, outputOverride || "", captureModeOverride || "",
-      freezePidForScreenshot())
+      freezePidForScreenshot(), demoCaptureHeld)
   }
 
   function runSelected(screenName) {
@@ -1225,7 +1237,10 @@ Item {
 
       Keys.priority: Keys.BeforeItem
       Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_Escape) {
+        if (root.isDemoCapturePress(event)) {
+          root.demoCaptureHeld = true
+          event.accepted = true
+        } else if (event.key === Qt.Key_Escape) {
           root.handleEscape()
           event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -1235,10 +1250,23 @@ Item {
           event.accepted = true
         }
       }
+      Keys.onReleased: function(event) {
+        if (root.isDemoCaptureRelease(event)) {
+          root.demoCaptureHeld = false
+          event.accepted = true
+        }
+      }
     }
 
     Shortcut {
       sequence: "Space"
+      context: Qt.WindowShortcut
+      autoRepeat: false
+      onActivated: root.captureWholeScreen()
+    }
+
+    Shortcut {
+      sequence: "Shift+Space"
       context: Qt.WindowShortcut
       autoRepeat: false
       onActivated: root.captureWholeScreen()
