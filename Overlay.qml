@@ -1582,6 +1582,7 @@ Item {
           iconText: "󰆿"
           tooltipText: "Pointer: " + (service && service.includeCursor ? "On" : "Off")
           checked: service && service.includeCursor
+          visible: !root.recordingMode && !root.recording
           onClicked: root.toggleBoolean("cursor")
         }
 
