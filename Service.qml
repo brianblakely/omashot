@@ -287,7 +287,6 @@ Item {
     interval: 1500
     running: true
     repeat: true
-    triggeredOnStart: true
     onTriggered: root.refreshStatus()
   }
 

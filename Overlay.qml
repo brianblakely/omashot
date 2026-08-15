@@ -35,9 +35,7 @@ Item {
   property string targetKind: ""
   property bool regionLocked: false
   property bool regionOnlyPicker: false
-  property bool freezeCapturePending: false
-  property string freezeImagePath: ""
-  property string freezeImageSource: ""
+  property bool freezeOpenPending: false
   property var pickerClients: []
   property var pickerMonitors: []
 
@@ -77,20 +75,19 @@ Item {
 
     if (service && typeof service.refreshStatus === "function") service.refreshStatus()
     if (regionEditor && service && service.rememberSelection !== true) hasSelection = false
-    if (regionEditor) captureFreezeAndOpen()
-    else showOverlay()
+    freezeAndShowOverlay()
   }
 
   function close() {
     opened = false
+    freezeOpenPending = false
+    freezeOpenTimer.stop()
+    if (freezeProc.running) freezeProc.running = false
     pickerAction = ""
     targetKind = ""
     regionLocked = false
     regionOnlyPicker = false
-    freezeCapturePending = false
-    if (freezeCaptureProc.running) freezeCaptureProc.running = false
     finishPointer()
-    clearFreezeImage()
   }
 
   function dismiss() {
@@ -99,15 +96,9 @@ Item {
   }
 
   function setMode(mode) {
-    var wasRegionEditor = regionEditor
     selectedMode = String(mode || "selection")
     if (service && typeof service.setCaptureMode === "function")
       service.setCaptureMode(selectedMode)
-
-    if (opened && !pickerMode) {
-      if (!wasRegionEditor && regionEditor) captureFreezeAndOpen()
-      else if (wasRegionEditor && !regionEditor) clearFreezeImage()
-    }
   }
 
   function runSelected(screenName) {
@@ -141,50 +132,18 @@ Item {
     return "file"
   }
 
-  function freezeCommand() {
-    return "set -e; dir=\"${XDG_RUNTIME_DIR:-/tmp}\"; path=\"$dir/omasnap-freeze-$(date +%s%N)-$$.png\"; screen=\"\"; if command -v hyprctl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then screen=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .name' | head -1); fi; if [ -n \"$screen\" ]; then grim -o \"$screen\" \"$path\" >/dev/null 2>&1; else grim \"$path\" >/dev/null 2>&1; fi; printf '%s\\n' \"$path\""
-  }
-
-  function fileUrl(path) {
-    return path === "" ? "" : "file://" + path
-  }
-
-  function clearFreezeImage() {
-    var oldPath = freezeImagePath
-    freezeImagePath = ""
-    freezeImageSource = ""
-    if (oldPath !== "")
-      Quickshell.execDetached(["rm", "-f", "--", oldPath])
-  }
-
   function showOverlay() {
+    freezeOpenPending = false
     opened = true
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
-  function captureFreezeAndOpen() {
-    if (freezeCaptureProc.running) freezeCaptureProc.running = false
+  function freezeAndShowOverlay() {
     opened = false
-    clearFreezeImage()
-    freezeCapturePending = true
-    Qt.callLater(function() {
-      if (!freezeCapturePending) return
-      freezeCaptureProc.command = ["bash", "-c", freezeCommand()]
-      freezeCaptureProc.running = true
-      freezeCaptureFallback.restart()
-    })
-  }
-
-  function finishFreezeCapture(path) {
-    if (!freezeCapturePending) return
-
-    var nextPath = String(path || "").replace(/^\s+|\s+$/g, "")
-    freezeCapturePending = false
-    if (nextPath !== "") {
-      freezeImagePath = nextPath
-      freezeImageSource = fileUrl(nextPath)
-    }
-    showOverlay()
+    freezeOpenPending = true
+    if (freezeProc.running) freezeProc.running = false
+    freezeProc.running = true
+    freezeOpenTimer.restart()
   }
 
   function refreshPickerTargets() {
@@ -867,22 +826,16 @@ Item {
   }
 
   Process {
-    id: freezeCaptureProc
-
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.finishFreezeCapture(String(text || ""))
-    }
+    id: freezeProc
+    command: ["hyprpicker", "-r", "-z", "-q"]
   }
 
   Timer {
-    id: freezeCaptureFallback
-    interval: 1200
+    id: freezeOpenTimer
+    interval: 100
     repeat: false
     onTriggered: {
-      if (!root.freezeCapturePending) return
-      if (freezeCaptureProc.running) freezeCaptureProc.running = false
-      root.finishFreezeCapture("")
+      if (root.freezeOpenPending) root.showOverlay()
     }
   }
 
@@ -972,16 +925,6 @@ Item {
       id: selectionLayer
       anchors.fill: parent
       visible: root.regionEditor
-
-      Image {
-        anchors.fill: parent
-        source: root.freezeImageSource
-        visible: root.freezeImageSource !== ""
-        fillMode: Image.Stretch
-        asynchronous: true
-        cache: false
-        smooth: false
-      }
 
       Rectangle {
         anchors.fill: parent
