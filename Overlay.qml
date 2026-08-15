@@ -1367,6 +1367,14 @@ Item {
       id: toolbar
       visible: !root.pickerMode
       readonly property int dropdownButtonWidth: Style.spacing.controlHeight + Style.spacing.controlPaddingX
+      readonly property real edgeMargin: Math.max(Style.gapsOut, Style.space(14))
+      readonly property real normalX: (panel.width - toolbar.width) / 2
+      readonly property real normalBottomY: panel.height - toolbar.height - toolbar.edgeMargin
+      readonly property bool moveToTop: root.hasSelection && root.regionEditor && !root.pickerMode
+        && root.selectionX < toolbar.normalX + toolbar.width
+        && root.selectionX + root.selectionW > toolbar.normalX
+        && root.selectionY < toolbar.normalBottomY + toolbar.height
+        && root.selectionY + root.selectionH > toolbar.normalBottomY
       readonly property real naturalContentWidth: {
         var items = content.visibleChildren
         var total = 0
@@ -1377,8 +1385,7 @@ Item {
       width: Math.max(1, Math.min(panel.width - Style.gapsOut * 2, implicitWidth))
       height: content.implicitHeight + padding * 2 + borderTop + borderBottom
       anchors.horizontalCenter: parent.horizontalCenter
-      anchors.bottom: parent.bottom
-      anchors.bottomMargin: Math.max(Style.gapsOut, Style.space(14))
+      y: toolbar.moveToTop ? toolbar.edgeMargin : toolbar.normalBottomY
       radius: Style.cornerRadius
       color: Color.menu.background
       borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.normalBorderWidth))
