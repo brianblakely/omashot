@@ -1117,17 +1117,15 @@ Item {
     BorderSurface {
       id: toolbar
       visible: !root.pickerMode
-      readonly property int visibleAudioControls: root.recordingMode || root.recording ? 3 : 0
-      readonly property int buttonControlCount: 5 + 3 + visibleAudioControls + 1
-      readonly property int dropdownControlCount: 3
-      readonly property int groupGapCount: 3
-      readonly property int itemCount: buttonControlCount + dropdownControlCount + groupGapCount
       readonly property int dropdownButtonWidth: Style.spacing.controlHeight + Style.spacing.controlPaddingX
-      readonly property int preferredContentWidth: buttonControlCount * Style.spacing.controlHeight
-        + dropdownControlCount * dropdownButtonWidth
-        + groupGapCount * Style.spacing.xs
-        + Math.max(0, itemCount - 1) * Style.spacing.xs
-      width: Math.max(1, Math.min(panel.width - Style.gapsOut * 2, preferredContentWidth + contentLeftInset + contentRightInset))
+      readonly property real naturalContentWidth: {
+        var items = content.visibleChildren
+        var total = 0
+        for (var i = 0; i < items.length; i++) total += items[i].width
+        return total + Math.max(0, items.length - 1) * content.spacing
+      }
+      implicitWidth: naturalContentWidth + contentLeftInset + contentRightInset
+      width: Math.max(1, Math.min(panel.width - Style.gapsOut * 2, implicitWidth))
       height: content.implicitHeight + padding * 2 + borderTop + borderBottom
       anchors.horizontalCenter: parent.horizontalCenter
       anchors.bottom: parent.bottom
