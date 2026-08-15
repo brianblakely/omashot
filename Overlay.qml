@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls as Controls
 import QtQuick.Window
 import Quickshell
 import Quickshell.Io
@@ -16,7 +16,7 @@ Item {
   property bool opened: false
 
   readonly property string pluginId: manifest && manifest.id ? String(manifest.id) : "b.omashot"
-  property string selectedMode: service ? service.captureMode : "selection"
+  property string captureKind: "screenshot"
   property bool hasSelection: false
   property int selectionX: 0
   property int selectionY: 0
@@ -41,41 +41,28 @@ Item {
   property bool freezeCapturePending: false
   property var pickerClients: []
   property var pickerMonitors: []
-  property string activeWindowAddress: ""
-  property bool hasWindowTarget: false
-  property int windowTargetX: 0
-  property int windowTargetY: 0
-  property int windowTargetW: 1
-  property int windowTargetH: 1
-  property string windowTargetScreenName: ""
 
   readonly property string screenRecordingIcon: "󰻂" // Omarchy bar recording indicator
-  readonly property string regionRecordingIcon: "󰻃" // nf-md-record_circle_outline
   readonly property string recordingPlayIcon: "" // nf-fa-circle_play
   readonly property string recordingStopIcon: "" // nf-fa-circle_stop
 
-  readonly property var captureModes: [
-    { value: "screen", label: "Screen", icon: "󰍹" },
-    { value: "window", label: "Window", icon: "󰖲" },
-    { value: "selection", label: "Region", icon: "󰆞" },
-    { value: "record-screen", label: "Record Screen", icon: screenRecordingIcon },
-    { value: "record-selection", label: "Record Region", icon: regionRecordingIcon }
+  readonly property var captureKinds: [
+    { value: "screenshot", label: "Screenshot", icon: "" },
+    { value: "recording", label: "Screen Recording", icon: screenRecordingIcon }
   ]
 
-  readonly property bool recordingMode: selectedMode === "record-screen" || selectedMode === "record-selection"
+  readonly property bool recordingMode: captureKind === "recording"
   readonly property bool recording: service && service.recording === true
   readonly property bool pickerMode: pickerAction !== ""
-  readonly property bool fullScreenMode: !pickerMode && (selectedMode === "screen" || selectedMode === "record-screen")
-  readonly property bool windowMode: selectedMode === "window" && !pickerMode
-  readonly property bool targetDiscoveryMode: pickerMode || windowMode
-  readonly property bool windowTargetVisible: windowMode && hasWindowTarget
-  readonly property bool regionEditor: selectedMode === "selection" || selectedMode === "record-selection" || pickerMode
-  readonly property bool regionActionRequiresSelection: regionOnlyPicker
-    || (!pickerMode && (selectedMode === "selection" || selectedMode === "record-selection"))
-  readonly property bool canRunSelected: recording || !regionActionRequiresSelection || hasSelection
-  readonly property bool showSelectionFrame: hasSelection && (!pickerMode || targetKind === "region")
+  readonly property bool targetDiscoveryMode: !regionOnlyPicker
+  readonly property bool regionEditor: true
+  readonly property bool hasCaptureTarget: targetKind === "screen"
+    || ((targetKind === "window" || targetKind === "region") && hasSelection)
+  readonly property bool canRunSelected: recording || hasCaptureTarget
+  readonly property bool showSelectionFrame: hasSelection && targetKind === "region"
   readonly property int minimumSelectionSize: 1
   readonly property real pointerDragThreshold: Style.space(4)
+  readonly property real topEdgeTargetHeight: Math.max(1, Style.space(4))
   readonly property real regionBorderWidth: Math.max(1, Style.normalBorderWidth)
 
   function open(payloadJson) {
@@ -84,7 +71,7 @@ Item {
 
     if (payload.action) {
       pickerAction = normalizePickerAction(payload.action)
-      selectedMode = "selection"
+      captureKind = pickerAction === "record" ? "recording" : "screenshot"
       hasSelection = false
       targetKind = ""
       regionLocked = false
@@ -93,9 +80,9 @@ Item {
     } else {
       pickerAction = ""
       regionOnlyPicker = false
-      if (payload.mode) selectedMode = String(payload.mode)
-      else if (service && service.captureMode) selectedMode = service.captureMode
-      if (isRegionMode(selectedMode)) clearSelection()
+      captureKind = "screenshot"
+      clearSelection()
+      refreshPickerTargets()
     }
 
     if (service && typeof service.refreshStatus === "function") service.refreshStatus()
@@ -117,7 +104,6 @@ Item {
     targetKind = ""
     regionLocked = false
     regionOnlyPicker = false
-    hasWindowTarget = false
     finishPointer()
   }
 
@@ -135,10 +121,6 @@ Item {
     dismiss()
   }
 
-  function isRegionMode(mode) {
-    return mode === "selection" || mode === "record-selection"
-  }
-
   function clearSelection() {
     hasSelection = false
     selectionScreenName = ""
@@ -147,18 +129,11 @@ Item {
     finishPointer()
   }
 
-  function setMode(mode) {
-    var nextMode = String(mode || "selection")
-    if (!pickerMode && isRegionMode(nextMode)) clearSelection()
-    selectedMode = nextMode
+  function setCaptureKind(kind) {
+    var nextKind = String(kind || "screenshot") === "recording" ? "recording" : "screenshot"
+    captureKind = nextKind
     if (service && typeof service.setCaptureMode === "function")
-      service.setCaptureMode(selectedMode)
-  }
-
-  function regionModeForDrag() {
-    if (selectedMode === "record-screen") return "record-selection"
-    if (selectedMode === "screen" || selectedMode === "window") return "selection"
-    return ""
+      service.setCaptureMode(nextKind === "recording" ? "record-screen" : "screen")
   }
 
   function freezePidForScreenshot() {
@@ -192,18 +167,7 @@ Item {
       return
     }
 
-    if ((selectedMode === "selection" || selectedMode === "record-selection") && !hasSelection)
-      return
-
-    if (selectedMode === "selection" && hasSelection)
-      takeGeometryScreenshot(selectionGeometry(), screenName || selectionScreenName || "")
-    else if (selectedMode === "window" && hasWindowTarget)
-      takeGeometryScreenshot(windowTargetGeometry(), screenName || windowTargetScreenName || "", "", "window")
-    else if (selectedMode === "record-selection" && hasSelection && typeof service.recordGeometry === "function")
-      service.recordGeometry(selectionGeometry(), screenName || selectionScreenName || "")
-    else if (selectedMode === "record-screen") service.record("screen")
-    else if (selectedMode === "record-selection") service.record("selection")
-    else takeScreenshot(selectedMode)
+    captureCurrentTarget(screenName)
   }
 
   function toggleBoolean(name) {
@@ -246,31 +210,8 @@ Item {
     return panel && panel.screen && panel.screen.name ? String(panel.screen.name) : ""
   }
 
-  function activeBarPosition() {
-    if (shell && shell.bar && shell.bar.position) return String(shell.bar.position)
-    if (shell && shell.barConfig && shell.barConfig.position) return String(shell.barConfig.position)
-    return "top"
-  }
-
-  function activeBarHidden() {
-    return shell && shell.bar && shell.bar.barHidden === true
-  }
-
-  function activeBarSize() {
-    if (shell && shell.bar && shell.bar.barSize) return Math.max(1, Math.round(Number(shell.bar.barSize) || 1))
-    var position = activeBarPosition()
-    return (position === "left" || position === "right") ? Style.bar.sizeVertical : Style.bar.sizeHorizontal
-  }
-
-  function isPointInBar(x, y, maxWidth, maxHeight) {
-    if (activeBarHidden()) return false
-
-    var position = activeBarPosition()
-    var size = activeBarSize()
-    if (position === "bottom") return y >= Math.max(0, maxHeight - size)
-    if (position === "left") return x <= size
-    if (position === "right") return x >= Math.max(0, maxWidth - size)
-    return y <= size
+  function isPointAtTopEdge(y) {
+    return y <= topEdgeTargetHeight
   }
 
   function monitorForScreen(screenName) {
@@ -355,49 +296,6 @@ Item {
     return true
   }
 
-  function clearWindowTarget() {
-    hasWindowTarget = false
-    windowTargetScreenName = ""
-  }
-
-  function setWindowTargetFromClient(client, maxWidth, maxHeight, screenName) {
-    var rect = clientRect(client)
-    if (!rect) return false
-
-    var offset = monitorOffset(screenName)
-    if (rect.x + rect.width <= offset.x || rect.y + rect.height <= offset.y
-        || rect.x >= offset.x + maxWidth || rect.y >= offset.y + maxHeight) return false
-
-    var local = globalRectToLocal(rect, screenName, maxWidth, maxHeight)
-    windowTargetX = local.x
-    windowTargetY = local.y
-    windowTargetW = local.width
-    windowTargetH = local.height
-    windowTargetScreenName = String(screenName || "")
-    hasWindowTarget = true
-    return true
-  }
-
-  function previewActiveWindow(maxWidth, maxHeight, screenName) {
-    var address = String(activeWindowAddress || "")
-    if (address === "") return false
-
-    for (var i = pickerClients.length - 1; i >= 0; i--) {
-      var client = pickerClients[i]
-      if (client && String(client.address || "") === address)
-        return setWindowTargetFromClient(client, maxWidth, maxHeight, screenName)
-    }
-    return false
-  }
-
-  function updateWindowPreview(x, y, maxWidth, maxHeight, screenName) {
-    if (!windowMode || pointerAction !== "") return
-
-    var client = clientAt(x, y, maxWidth, maxHeight, screenName)
-    if (client && setWindowTargetFromClient(client, maxWidth, maxHeight, screenName)) return
-    clearWindowTarget()
-  }
-
   function setScreenTarget(maxWidth, maxHeight, screenName) {
     selectionScreenName = String(screenName || "")
     setSelection(0, 0, maxWidth, maxHeight, maxWidth, maxHeight)
@@ -405,11 +303,19 @@ Item {
     regionLocked = false
   }
 
-  function updatePickerHover(x, y, maxWidth, maxHeight, screenName) {
-    if (!pickerMode || pointerAction !== "" || regionLocked) return
+  function updateTargetHover(x, y, maxWidth, maxHeight, screenName) {
+    if (!targetDiscoveryMode || pointerAction !== "") return
     if (regionOnlyPicker) return
 
-    if (isPointInBar(x, y, maxWidth, maxHeight)) {
+    if (regionLocked) {
+      var insideRegion = targetKind === "region" && hasSelection
+        && x >= selectionX && x <= selectionX + selectionW
+        && y >= selectionY && y <= selectionY + selectionH
+      if (insideRegion) return
+      regionLocked = false
+    }
+
+    if (isPointAtTopEdge(y)) {
       setScreenTarget(maxWidth, maxHeight, screenName)
       return
     }
@@ -481,12 +387,6 @@ Item {
     return Math.round(selectionX) + "," + Math.round(selectionY) + " " + Math.round(selectionW) + "x" + Math.round(selectionH)
   }
 
-  function windowTargetGeometry() {
-    if (!hasWindowTarget) return ""
-    return Math.round(windowTargetX) + "," + Math.round(windowTargetY) + " "
-      + Math.round(windowTargetW) + "x" + Math.round(windowTargetH)
-  }
-
   function beginPointer(action, x, y, maxWidth, maxHeight, screenName) {
     selectionScreenName = String(screenName || "")
     pointerHadSelection = hasSelection
@@ -511,7 +411,7 @@ Item {
     beginPointer(pendingAction, x, y, maxWidth, maxHeight, screenName)
   }
 
-  function beginPickerPointer(x, y, maxWidth, maxHeight, screenName) {
+  function beginTargetPointer(x, y, maxWidth, maxHeight, screenName) {
     selectionScreenName = String(screenName || "")
 
     if (regionOnlyPicker) {
@@ -530,7 +430,7 @@ Item {
     pointerSelectionH = selectionH
     regionLocked = false
 
-    if (isPointInBar(pointerStartX, pointerStartY, maxWidth, maxHeight)) {
+    if (isPointAtTopEdge(pointerStartY)) {
       setScreenTarget(maxWidth, maxHeight, screenName)
       return
     }
@@ -562,7 +462,7 @@ Item {
     }
 
     if (pointerAction === "pending") {
-      if (dx === 0 && dy === 0) return
+      if (Math.abs(dx) + Math.abs(dy) < pointerDragThreshold) return
       pointerAction = "draw"
       targetKind = "region"
       regionLocked = true
@@ -611,7 +511,7 @@ Item {
     if (placeExisting) setSelection(x, y, width, height, maxWidth, maxHeight)
   }
 
-  function finishPickerPointer(maxWidth, maxHeight, screenName) {
+  function finishTargetPointer(maxWidth, maxHeight, screenName) {
     var action = pointerAction
     finishPointer()
 
@@ -675,13 +575,11 @@ Item {
 
   function handleSelectionKey(event, maxWidth, maxHeight, screenName) {
     var direction = keyDirection(event.key)
-    if (direction === "" || !hasSelection) return false
+    if (direction === "" || targetKind !== "region" || !hasSelection) return false
 
     ensureSelection(maxWidth, maxHeight, screenName)
-    if (pickerMode) {
-      targetKind = "region"
-      regionLocked = true
-    }
+    targetKind = "region"
+    regionLocked = true
     var shift = (event.modifiers & Qt.ShiftModifier) !== 0
     var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
     var increment = (event.modifiers & Qt.AltModifier) !== 0 ? 10 : 1
@@ -692,8 +590,11 @@ Item {
 
   function captureScreenTarget(screenName) {
     if (!service) return
-    if (pickerAction === "record") service.record("screen")
-    else takeScreenshot("screen", pickerAction === "clipboard" ? "clipboard" : "file")
+    if (pickerMode) {
+      if (pickerAction === "record") service.record("screen")
+      else takeScreenshot("screen", pickerAction === "clipboard" ? "clipboard" : "file")
+    } else if (recordingMode) service.record("screen")
+    else takeScreenshot("screen")
   }
 
   function captureWholeScreen() {
@@ -708,7 +609,7 @@ Item {
   }
 
   function captureCurrentTarget(screenName) {
-    if (!service || !pickerMode) return
+    if (!service || !hasCaptureTarget) return
 
     if (targetKind === "screen") {
       captureScreenTarget(screenName)
@@ -717,34 +618,22 @@ Item {
 
     if ((targetKind === "window" || targetKind === "region") && hasSelection) {
       var geometry = selectionGeometry()
-      if (pickerAction === "record" && typeof service.recordGeometry === "function")
-        service.recordGeometry(geometry, screenName || selectionScreenName || "")
-      else if (typeof service.screenshotGeometry === "function")
-        takeGeometryScreenshot(geometry, screenName || selectionScreenName || "", pickerAction === "clipboard" ? "clipboard" : "file")
+      var targetScreen = screenName || selectionScreenName || ""
+      if (pickerMode) {
+        if (pickerAction === "record" && typeof service.recordGeometry === "function")
+          service.recordGeometry(geometry, targetScreen)
+        else if (typeof service.screenshotGeometry === "function")
+          takeGeometryScreenshot(geometry, targetScreen, pickerAction === "clipboard" ? "clipboard" : "file")
+      } else if (recordingMode && typeof service.recordGeometry === "function") {
+        service.recordGeometry(geometry, targetScreen)
+      } else if (typeof service.screenshotGeometry === "function") {
+        takeGeometryScreenshot(geometry, targetScreen, "", targetKind === "window" ? "window" : "selection")
+      }
     }
   }
 
-  function captureFocusedWindowOrRegion(screenName, maxWidth, maxHeight) {
-    if (regionOnlyPicker) {
-      if (targetKind === "region" && hasSelection) captureCurrentTarget(screenName)
-      return
-    }
-
-    if (targetKind === "screen" || targetKind === "window" || targetKind === "region") {
-      captureCurrentTarget(screenName)
-      return
-    }
-
-    var workspaceId = monitorWorkspaceId(screenName)
-    for (var i = pickerClients.length - 1; i >= 0; i--) {
-      var client = pickerClients[i]
-      if (!client || client.focused !== true) continue
-      if (client.workspace && isFinite(workspaceId) && Number(client.workspace.id) !== workspaceId) continue
-      if (setTargetFromClient(client, maxWidth, maxHeight, screenName)) {
-        captureCurrentTarget(screenName)
-        return
-      }
-    }
+  function captureSelectedTarget(screenName) {
+    if (hasCaptureTarget) captureCurrentTarget(screenName)
   }
 
   component MenuButton: Rectangle {
@@ -911,7 +800,7 @@ Item {
       fontFamily: Style.font.menuFamily
     }
 
-    Popup {
+    Controls.Popup {
       id: popup
       parent: iconDropdown
       x: 0
@@ -924,7 +813,7 @@ Item {
                                Style.spacing.popupRowHeight * 8 + 7 * Style.spacing.labelGap + Style.spacing.xxs)
       padding: Style.spacing.hairline
       focus: true
-      closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+      closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutsideParent
 
       onAboutToShow: iconDropdown.positionPopup()
       background: Rectangle {
@@ -1028,7 +917,7 @@ Item {
     command: [
       "bash",
       "-c",
-      "printf '{\"monitors\":'; hyprctl monitors -j 2>/dev/null || printf '[]'; printf ',\"clients\":'; hyprctl clients -j 2>/dev/null || printf '[]'; printf ',\"activeWindow\":'; hyprctl activewindow -j 2>/dev/null || printf '{}'; printf '}'"
+      "printf '{\"monitors\":'; hyprctl monitors -j 2>/dev/null || printf '[]'; printf ',\"clients\":'; hyprctl clients -j 2>/dev/null || printf '[]'; printf '}'"
     ]
 
     stdout: StdioCollector {
@@ -1038,22 +927,16 @@ Item {
           var parsed = JSON.parse(String(text || "{}"))
           root.pickerMonitors = Array.isArray(parsed.monitors) ? parsed.monitors : []
           root.pickerClients = Array.isArray(parsed.clients) ? parsed.clients : []
-          root.activeWindowAddress = parsed.activeWindow ? String(parsed.activeWindow.address || "") : ""
 
-          if (root.windowMode) Qt.callLater(function() {
-            if (!root.windowMode) return
-            if (backgroundGesture.containsMouse)
-              root.updateWindowPreview(backgroundGesture.mouseX, backgroundGesture.mouseY,
-                panel.width, panel.height, panel.currentScreenName)
-            else if (!root.hasWindowTarget
-                     && !root.previewActiveWindow(panel.width, panel.height, panel.currentScreenName))
-              root.clearWindowTarget()
+          if (root.opened && root.targetDiscoveryMode) Qt.callLater(function() {
+            if (!root.opened || !root.targetDiscoveryMode || !selectionPointer.containsMouse) return
+            root.updateTargetHover(selectionPointer.mouseX, selectionPointer.mouseY,
+              panel.width, panel.height, panel.currentScreenName)
           })
         } catch (e) {
           root.pickerMonitors = []
           root.pickerClients = []
-          root.activeWindowAddress = ""
-          root.clearWindowTarget()
+          if (root.targetKind === "window") root.clearSelection()
         }
       }
     }
@@ -1103,153 +986,10 @@ Item {
     readonly property string currentScreenName: root.panelScreenName(panel)
 
     onVisibleChanged: {
-      if (visible && root.windowMode) root.refreshPickerTargets()
+      if (visible && root.targetDiscoveryMode) root.refreshPickerTargets()
     }
     onWidthChanged: if (root.regionEditor && root.hasSelection) root.ensureSelection(panel.width, panel.height, panel.currentScreenName)
     onHeightChanged: if (root.regionEditor && root.hasSelection) root.ensureSelection(panel.width, panel.height, panel.currentScreenName)
-
-    Connections {
-      target: root
-      function onSelectedModeChanged() {
-        if (panel.visible && root.isRegionMode(root.selectedMode) && !root.pickerMode)
-          root.clearSelection()
-        if (root.windowMode) {
-          root.clearWindowTarget()
-          root.refreshPickerTargets()
-        } else if (!root.pickerMode) {
-          root.clearWindowTarget()
-        }
-      }
-    }
-
-    Rectangle {
-      anchors.fill: parent
-      color: Color.menu.scrim
-      opacity: 0.72
-      visible: !root.regionEditor && !root.fullScreenMode && !root.windowTargetVisible
-    }
-
-    Item {
-      anchors.fill: parent
-      visible: root.windowTargetVisible
-
-      Rectangle {
-        x: 0
-        y: 0
-        width: parent.width
-        height: root.windowTargetY
-        color: Color.menu.scrim
-        opacity: 0.72
-      }
-
-      Rectangle {
-        x: 0
-        y: root.windowTargetY
-        width: root.windowTargetX
-        height: root.windowTargetH
-        color: Color.menu.scrim
-        opacity: 0.72
-      }
-
-      Rectangle {
-        x: root.windowTargetX + root.windowTargetW
-        y: root.windowTargetY
-        width: Math.max(0, parent.width - x)
-        height: root.windowTargetH
-        color: Color.menu.scrim
-        opacity: 0.72
-      }
-
-      Rectangle {
-        x: 0
-        y: root.windowTargetY + root.windowTargetH
-        width: parent.width
-        height: Math.max(0, parent.height - y)
-        color: Color.menu.scrim
-        opacity: 0.72
-      }
-
-      Rectangle {
-        x: root.windowTargetX
-        y: root.windowTargetY
-        width: root.windowTargetW
-        height: root.windowTargetH
-        color: "transparent"
-        border.color: Color.accent
-        border.width: root.regionBorderWidth
-      }
-    }
-
-    MouseArea {
-      id: backgroundGesture
-
-      property bool dragging: false
-      property real pressedX: 0
-      property real pressedY: 0
-      readonly property real dragThreshold: Style.space(4)
-
-      anchors.fill: parent
-      visible: !root.regionEditor || dragging
-      acceptedButtons: Qt.LeftButton
-      preventStealing: true
-      hoverEnabled: root.windowMode
-      cursorShape: dragging ? Qt.CrossCursor : Qt.ArrowCursor
-
-      onPressed: function(mouse) {
-        dragging = false
-        pressedX = mouse.x
-        pressedY = mouse.y
-      }
-
-      onPositionChanged: function(mouse) {
-        if (!(mouse.buttons & Qt.LeftButton)) {
-          if (root.windowMode)
-            root.updateWindowPreview(mouse.x, mouse.y, width, height, panel.currentScreenName)
-          return
-        }
-
-        if (!dragging) {
-          var distance = Math.abs(mouse.x - pressedX) + Math.abs(mouse.y - pressedY)
-          if (distance < dragThreshold) return
-
-          var nextMode = root.regionModeForDrag()
-          if (nextMode === "") return
-
-          dragging = true
-          root.setMode(nextMode)
-          keyCatcher.forceActiveFocus()
-          root.beginPointer("draw", pressedX, pressedY, width, height, panel.currentScreenName)
-        }
-
-        root.updatePointer(mouse.x, mouse.y, width, height)
-        mouse.accepted = true
-      }
-
-      onReleased: function(mouse) {
-        if (!dragging) {
-          if (root.windowMode) {
-            root.updateWindowPreview(mouse.x, mouse.y, width, height, panel.currentScreenName)
-            if (root.hasWindowTarget) {
-              root.runSelected(panel.currentScreenName)
-              mouse.accepted = true
-              return
-            }
-          }
-
-          root.dismiss()
-          return
-        }
-
-        root.finishPointer()
-        dragging = false
-        mouse.accepted = true
-      }
-
-      onCanceled: {
-        if (dragging) root.finishPointer()
-        dragging = false
-      }
-    }
 
     component ResizeHandle: Rectangle {
       required property string edge
@@ -1282,8 +1022,8 @@ Item {
         onPressed: function(mouse) {
           var point = mapToItem(selectionLayer, mouse.x, mouse.y)
           keyCatcher.forceActiveFocus()
-          if (root.pickerMode) root.targetKind = "region"
-          if (root.pickerMode) root.regionLocked = true
+          root.targetKind = "region"
+          root.regionLocked = true
           root.beginPointer(parent.edge, point.x, point.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
           mouse.accepted = true
         }
@@ -1348,25 +1088,36 @@ Item {
       }
 
       MouseArea {
+        id: selectionPointer
         anchors.fill: parent
         cursorShape: Qt.CrossCursor
         acceptedButtons: Qt.LeftButton
-        hoverEnabled: root.pickerMode
+        hoverEnabled: root.targetDiscoveryMode
         preventStealing: true
         onPressed: function(mouse) {
           keyCatcher.forceActiveFocus()
-          if (root.pickerMode) root.beginPickerPointer(mouse.x, mouse.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
-          else root.beginRegionPointer("draw", mouse.x, mouse.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
+          root.beginTargetPointer(mouse.x, mouse.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
           mouse.accepted = true
         }
         onPositionChanged: function(mouse) {
           if (root.pointerAction !== "") root.updatePointer(mouse.x, mouse.y, selectionLayer.width, selectionLayer.height)
-          else root.updatePickerHover(mouse.x, mouse.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
+          else root.updateTargetHover(mouse.x, mouse.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
         }
-        onReleased: {
-          if (root.pickerMode) root.finishPickerPointer(selectionLayer.width, selectionLayer.height, panel.currentScreenName)
-          else root.finishRegionPointer(selectionLayer.width, selectionLayer.height)
+        onReleased: root.finishTargetPointer(selectionLayer.width, selectionLayer.height, panel.currentScreenName)
+        onCanceled: {
+          root.finishPointer()
         }
+      }
+
+      Rectangle {
+        x: root.selectionX
+        y: root.selectionY
+        width: root.selectionW
+        height: root.selectionH
+        visible: root.hasSelection && root.targetKind === "window"
+        color: "transparent"
+        border.color: Color.accent
+        border.width: root.regionBorderWidth
       }
 
       Rectangle {
@@ -1389,22 +1140,16 @@ Item {
           onPressed: function(mouse) {
             var point = mapToItem(selectionLayer, mouse.x, mouse.y)
             keyCatcher.forceActiveFocus()
-            if (root.pickerMode) root.targetKind = "region"
-            if (root.pickerMode) root.regionLocked = true
-            if (root.pickerMode)
-              root.beginPointer("move", point.x, point.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
-            else
-              root.beginRegionPointer("move", point.x, point.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
+            root.targetKind = "region"
+            root.regionLocked = true
+            root.beginRegionPointer("move", point.x, point.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
             mouse.accepted = true
           }
           onPositionChanged: function(mouse) {
             var point = mapToItem(selectionLayer, mouse.x, mouse.y)
             root.updatePointer(point.x, point.y, selectionLayer.width, selectionLayer.height)
           }
-          onReleased: {
-            if (root.pickerMode) root.finishPointer()
-            else root.finishRegionPointer(selectionLayer.width, selectionLayer.height)
-          }
+          onReleased: root.finishRegionPointer(selectionLayer.width, selectionLayer.height)
         }
 
         ResizeHandle {
@@ -1460,13 +1205,9 @@ Item {
           root.handleEscape()
           event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-          if (root.pickerMode) root.captureFocusedWindowOrRegion(panel.currentScreenName, panel.width, panel.height)
-          else root.runSelected(panel.currentScreenName)
+          root.captureSelectedTarget(panel.currentScreenName)
           event.accepted = true
         } else if (root.regionEditor && root.handleSelectionKey(event, panel.width, panel.height, panel.currentScreenName)) {
-          event.accepted = true
-        } else if (!root.pickerMode && event.key >= Qt.Key_1 && event.key <= Qt.Key_5) {
-          root.setMode(root.captureModes[event.key - Qt.Key_1].value)
           event.accepted = true
         }
       }
@@ -1486,7 +1227,7 @@ Item {
       readonly property real edgeMargin: Math.max(Style.gapsOut, Style.space(14))
       readonly property real normalX: (panel.width - toolbar.width) / 2
       readonly property real normalBottomY: panel.height - toolbar.height - toolbar.edgeMargin
-      readonly property bool moveToTop: root.hasSelection && root.regionEditor && !root.pickerMode
+      readonly property bool moveToTop: root.hasSelection && root.targetKind === "region" && !root.pickerMode
         && root.selectionX < toolbar.normalX + toolbar.width
         && root.selectionX + root.selectionW > toolbar.normalX
         && root.selectionY < toolbar.normalBottomY + toolbar.height
@@ -1520,15 +1261,16 @@ Item {
         anchors.topMargin: toolbar.contentTopInset
         spacing: Style.spacing.xs
 
-        Repeater {
-          model: root.captureModes
-
-          MenuButton {
-            iconText: modelData.icon
-            tooltipText: modelData.label
-            checked: root.selectedMode === modelData.value
-            onClicked: root.setMode(modelData.value)
-          }
+        ButtonGroup {
+          options: root.captureKinds
+          value: root.recordingMode ? "recording" : "screenshot"
+          foreground: Color.menu.text
+          background: Color.menu.background
+          accent: Color.accent
+          fontFamily: Style.font.menuFamily
+          fontSize: Style.font.bodySmall
+          focusable: false
+          onChanged: function(value) { root.setCaptureKind(value) }
         }
 
         GroupGap {}
@@ -1627,7 +1369,7 @@ Item {
           iconText: root.recording ? root.recordingStopIcon
             : root.recordingMode ? root.recordingPlayIcon
             : ""
-          tooltipText: !root.canRunSelected ? "Draw a region first"
+          tooltipText: !root.canRunSelected ? "Select a window, screen, or region"
             : root.recording ? "Stop recording"
             : root.recordingMode ? "Record"
             : "Capture"
