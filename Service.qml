@@ -78,6 +78,12 @@ Item {
     ]
   }
 
+  function freezeArgs(freezePid) {
+    var pid = Math.floor(Number(freezePid))
+    if (!isFinite(pid) || pid <= 0) return []
+    return ["--freeze-pid=" + String(pid)]
+  }
+
   function recordingArgs() {
     var args = commonArgs("")
     if (recordDesktopAudio) args.push("--desktop-audio")
@@ -129,13 +135,14 @@ Item {
     return showTargetPicker(action || "file", true)
   }
 
-  function screenshot(mode, outputOverride) {
-    saveSettings({ captureMode: String(mode || captureMode || "selection") })
+  function screenshot(mode, outputOverride, freezePid) {
+    var target = String(mode || captureMode || "selection")
+    saveSettings({ captureMode: target })
     hide()
-    return runDetached(["screenshot", String(mode || captureMode || "selection")].concat(commonArgs(outputOverride || "")))
+    return runDetached(["screenshot", target].concat(freezeArgs(freezePid)).concat(commonArgs(outputOverride || "")))
   }
 
-  function screenshotGeometry(geometry, screenName, outputOverride, captureModeOverride) {
+  function screenshotGeometry(geometry, screenName, outputOverride, captureModeOverride, freezePid) {
     var selectedGeometry = String(geometry || "").replace(/^\s+|\s+$/g, "")
     if (selectedGeometry === "") return "missing-geometry"
 
@@ -144,7 +151,7 @@ Item {
 
     var args = ["screenshot", "selection", "--geometry=" + selectedGeometry]
     if (screenName) args.push("--screen-name=" + String(screenName))
-    return runDetached(args.concat(commonArgs(outputOverride || "")))
+    return runDetached(args.concat(freezeArgs(freezePid)).concat(commonArgs(outputOverride || "")))
   }
 
   function recordGeometry(geometry, screenName) {

@@ -38,6 +38,7 @@ Item {
   property bool regionLocked: false
   property bool regionOnlyPicker: false
   property bool freezeOpenPending: false
+  property bool freezeCapturePending: false
   property var pickerClients: []
   property var pickerMonitors: []
   property string activeWindowAddress: ""
@@ -92,10 +93,16 @@ Item {
   }
 
   function close() {
+    var preserveFreeze = freezeCapturePending && freezeProc.running
     opened = false
     freezeOpenPending = false
+    freezeCapturePending = false
     freezeOpenTimer.stop()
-    if (freezeProc.running) freezeProc.running = false
+    if (preserveFreeze) freezeCaptureCleanupTimer.restart()
+    else {
+      freezeCaptureCleanupTimer.stop()
+      if (freezeProc.running) freezeProc.running = false
+    }
     pickerAction = ""
     targetKind = ""
     regionLocked = false
@@ -121,6 +128,29 @@ Item {
     return ""
   }
 
+  function freezePidForScreenshot() {
+    if (!freezeProc.running || !service || Number(service.timerSeconds) > 0) return ""
+
+    var pid = parseInt(String(freezeProc.processId || ""), 10)
+    if (!isFinite(pid) || pid <= 0) return ""
+
+    // The helper takes ownership of this process and stops it after grim has
+    // copied the frozen surface. The cleanup timer is only a failure fallback.
+    freezeCapturePending = true
+    return String(pid)
+  }
+
+  function takeScreenshot(mode, outputOverride) {
+    if (!service || typeof service.screenshot !== "function") return
+    return service.screenshot(mode, outputOverride || "", freezePidForScreenshot())
+  }
+
+  function takeGeometryScreenshot(geometry, screenName, outputOverride, captureModeOverride) {
+    if (!service || typeof service.screenshotGeometry !== "function") return
+    return service.screenshotGeometry(geometry, screenName, outputOverride || "", captureModeOverride || "",
+      freezePidForScreenshot())
+  }
+
   function runSelected(screenName) {
     if (!service) return
 
@@ -129,15 +159,15 @@ Item {
       return
     }
 
-    if (selectedMode === "selection" && hasSelection && typeof service.screenshotGeometry === "function")
-      service.screenshotGeometry(selectionGeometry(), screenName || selectionScreenName || "")
-    else if (selectedMode === "window" && hasWindowTarget && typeof service.screenshotGeometry === "function")
-      service.screenshotGeometry(windowTargetGeometry(), screenName || windowTargetScreenName || "", "", "window")
+    if (selectedMode === "selection" && hasSelection)
+      takeGeometryScreenshot(selectionGeometry(), screenName || selectionScreenName || "")
+    else if (selectedMode === "window" && hasWindowTarget)
+      takeGeometryScreenshot(windowTargetGeometry(), screenName || windowTargetScreenName || "", "", "window")
     else if (selectedMode === "record-selection" && hasSelection && typeof service.recordGeometry === "function")
       service.recordGeometry(selectionGeometry(), screenName || selectionScreenName || "")
     else if (selectedMode === "record-screen") service.record("screen")
     else if (selectedMode === "record-selection") service.record("selection")
-    else service.screenshot(selectedMode)
+    else takeScreenshot(selectedMode)
   }
 
   function toggleBoolean(name) {
@@ -164,6 +194,8 @@ Item {
   function freezeAndShowOverlay() {
     opened = false
     freezeOpenPending = true
+    freezeCapturePending = false
+    freezeCaptureCleanupTimer.stop()
     if (freezeProc.running) freezeProc.running = false
     freezeProc.running = true
     freezeOpenTimer.restart()
@@ -627,18 +659,18 @@ Item {
   function captureScreenTarget(screenName) {
     if (!service) return
     if (pickerAction === "record") service.record("screen")
-    else service.screenshot("screen", pickerAction === "clipboard" ? "clipboard" : "file")
+    else takeScreenshot("screen", pickerAction === "clipboard" ? "clipboard" : "file")
   }
 
   function captureWholeScreen() {
     if (!service) return
 
     if (pickerMode && pickerAction !== "record") {
-      service.screenshot("screen", pickerAction === "clipboard" ? "clipboard" : "file")
+      takeScreenshot("screen", pickerAction === "clipboard" ? "clipboard" : "file")
       return
     }
 
-    service.screenshot("screen")
+    takeScreenshot("screen")
   }
 
   function captureCurrentTarget(screenName) {
@@ -654,7 +686,7 @@ Item {
       if (pickerAction === "record" && typeof service.recordGeometry === "function")
         service.recordGeometry(geometry, screenName || selectionScreenName || "")
       else if (typeof service.screenshotGeometry === "function")
-        service.screenshotGeometry(geometry, screenName || selectionScreenName || "", pickerAction === "clipboard" ? "clipboard" : "file")
+        takeGeometryScreenshot(geometry, screenName || selectionScreenName || "", pickerAction === "clipboard" ? "clipboard" : "file")
     }
   }
 
@@ -990,6 +1022,15 @@ Item {
   Process {
     id: freezeProc
     command: ["hyprpicker", "-r", "-z", "-q"]
+  }
+
+  Timer {
+    id: freezeCaptureCleanupTimer
+    interval: 5000
+    repeat: false
+    onTriggered: {
+      if (freezeProc.running) freezeProc.running = false
+    }
   }
 
   Timer {

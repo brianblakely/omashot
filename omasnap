@@ -29,6 +29,9 @@ MICROPHONE_AUDIO="false"
 WEBCAM="false"
 GEOMETRY=""
 SCREEN_NAME=""
+# A freeze handed off by the overlay remains visible through grim and becomes
+# this process's responsibility to stop, including on failure.
+CAPTURE_FREEZE_PID=""
 
 fail() {
   printf '%s: %s\n' "$APP_NAME" "$*" >&2
@@ -100,6 +103,11 @@ while (($# > 0)); do
     ;;
   --screen-name | --screen-name=*)
     SCREEN_NAME=$(take_value "$1" "${2:-}")
+    [[ $1 == *=* ]] && shift || shift 2
+    ;;
+  --freeze-pid | --freeze-pid=*)
+    CAPTURE_FREEZE_PID=$(take_value "$1" "${2:-}")
+    [[ $CAPTURE_FREEZE_PID =~ ^[1-9][0-9]*$ ]] || fail "invalid freeze process id"
     [[ $1 == *=* ]] && shift || shift 2
     ;;
   *)
@@ -273,10 +281,16 @@ snap_tiny_selection() {
 }
 
 FREEZE_PID=""
+PICKED_GEOMETRY=""
 NO_HW_CURSORS=""
 STOP_OUTPUT_FILE=""
 
 start_freeze() {
+  if [[ -n $CAPTURE_FREEZE_PID ]]; then
+    require_capture_freeze
+    return
+  fi
+
   if command -v hyprpicker >/dev/null 2>&1; then
     hyprpicker -r -z >/dev/null 2>&1 &
     FREEZE_PID=$!
@@ -284,9 +298,19 @@ start_freeze() {
   fi
 }
 
+require_capture_freeze() {
+  [[ -z $CAPTURE_FREEZE_PID ]] || kill -0 "$CAPTURE_FREEZE_PID" 2>/dev/null ||
+    fail "freeze frame is no longer available"
+}
+
 stop_freeze() {
   [[ -n $FREEZE_PID ]] && kill "$FREEZE_PID" >/dev/null 2>&1 || true
   FREEZE_PID=""
+}
+
+stop_capture_freeze() {
+  [[ -n $CAPTURE_FREEZE_PID ]] && kill "$CAPTURE_FREEZE_PID" >/dev/null 2>&1 || true
+  CAPTURE_FREEZE_PID=""
 }
 
 set_no_hw_cursors() {
@@ -316,6 +340,7 @@ restore_cursor_mode() {
 
 cleanup() {
   stop_freeze
+  stop_capture_freeze
   restore_cursor_mode
   [[ -n $STOP_OUTPUT_FILE ]] && rm -f -- "$STOP_OUTPUT_FILE"
 }
@@ -351,8 +376,10 @@ write_state() {
 
 pick_geometry() {
   local rects selection
+  PICKED_GEOMETRY=""
+
   if [[ -n $GEOMETRY ]]; then
-    geometry_with_screen_offset "$GEOMETRY"
+    PICKED_GEOMETRY=$(geometry_with_screen_offset "$GEOMETRY") || return 1
     return
   fi
 
@@ -361,13 +388,12 @@ pick_geometry() {
 
   case "${TARGET,,}" in
   screen | all | all-screens)
-    printf '\n'
     ;;
   display | monitor | fullscreen)
-    focused_display_geometry
+    PICKED_GEOMETRY=$(focused_display_geometry)
     ;;
   active-window | active)
-    active_window_geometry
+    PICKED_GEOMETRY=$(active_window_geometry)
     ;;
   window | windows)
     require_command slurp
@@ -375,26 +401,23 @@ pick_geometry() {
     [[ -n $rects ]] || rects=$(all_rectangles)
     start_freeze
     selection=$(printf '%s\n' "$rects" | slurp -r 2>/dev/null)
-    stop_freeze
-    printf '%s\n' "$selection"
+    PICKED_GEOMETRY=$selection
     ;;
   last | last-selection)
-    last_state_value lastSelection
+    PICKED_GEOMETRY=$(last_state_value lastSelection)
     ;;
   smart)
     require_command slurp
     rects=$(all_rectangles)
     start_freeze
     selection=$(printf '%s\n' "$rects" | slurp 2>/dev/null)
-    stop_freeze
-    snap_tiny_selection "$selection" "$rects"
+    PICKED_GEOMETRY=$(snap_tiny_selection "$selection" "$rects")
     ;;
   selection | region | *)
     require_command slurp
     start_freeze
     selection=$(slurp 2>/dev/null)
-    stop_freeze
-    printf '%s\n' "$selection"
+    PICKED_GEOMETRY=$selection
     ;;
   esac
 }
@@ -430,6 +453,7 @@ notify_capture() {
 screenshot() {
   require_command grim
   require_command jq
+  require_capture_freeze
 
   local mode filepath output_dir filename selection
   mode=$(normalize_output_mode)
@@ -439,7 +463,8 @@ screenshot() {
   fi
 
   wait_for_timer
-  selection=$(pick_geometry)
+  pick_geometry || exit $?
+  selection=$PICKED_GEOMETRY
   if [[ -z $selection && ! ${TARGET,,} =~ ^(screen|all|all-screens)$ ]]; then
     exit 0
   fi
@@ -461,8 +486,11 @@ screenshot() {
   [[ -n $selection ]] && grim_args+=(-g "$selection")
   truthy "$INCLUDE_CURSOR" && grim_args+=(-c)
 
+  require_capture_freeze
   prepare_cursor_capture
   grim "${grim_args[@]}" "$filepath" || exit 1
+  stop_freeze
+  stop_capture_freeze
   restore_cursor_mode
 
   case "$mode" in
@@ -561,7 +589,10 @@ record_geometry() {
 
   wait_for_timer
 
-  selection=$(pick_geometry)
+  pick_geometry || exit $?
+  selection=$PICKED_GEOMETRY
+  stop_freeze
+  stop_capture_freeze
   [[ -n $selection ]] || exit 0
   region=$(geometry_to_gsr_region "$selection") || exit 1
 
