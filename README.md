@@ -14,7 +14,7 @@ omarchy plugin add https://github.com/brianblakely/omashot.git
 * Press `Enter` to capture the focused window.
 * Use the arrow keys or `HJKL` to move a region by one pixel.
 * Hold `Shift` to grow the addressed edge.
-* Hold `Shift+Ctrl` to shrink the addressed edge.
+* Hold `Shift+Ctrl` to shrink from the edge opposite the pressed direction.
 * With the mouse, click the bar to select the screen, click a window to select it, or drag a region.
 
 ## Shortcuts

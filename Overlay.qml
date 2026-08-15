@@ -473,6 +473,13 @@ Item {
   }
 
   function resizeSelectionByKey(direction, grow, maxWidth, maxHeight) {
+    if (!grow) {
+      if (direction === "left") direction = "right"
+      else if (direction === "right") direction = "left"
+      else if (direction === "up") direction = "down"
+      else if (direction === "down") direction = "up"
+    }
+
     var left = selectionX
     var top = selectionY
     var right = selectionX + selectionW
