@@ -51,9 +51,10 @@ Item {
   readonly property bool recordingMode: selectedMode === "record-screen" || selectedMode === "record-selection"
   readonly property bool recording: service && service.recording === true
   readonly property bool pickerMode: pickerAction !== ""
-  readonly property bool regionEditor: selectedMode === "selection" || pickerMode
+  readonly property bool regionEditor: selectedMode === "selection" || selectedMode === "record-selection" || pickerMode
   readonly property bool showSelectionFrame: hasSelection && (!pickerMode || targetKind === "region")
   readonly property int minimumSelectionSize: 1
+  readonly property real regionBorderWidth: Math.max(1, Style.normalBorderWidth)
 
   function open(payloadJson) {
     var payload = ({})
@@ -101,6 +102,12 @@ Item {
       service.setCaptureMode(selectedMode)
   }
 
+  function regionModeForDrag() {
+    if (selectedMode === "record-screen") return "record-selection"
+    if (selectedMode === "screen" || selectedMode === "window") return "selection"
+    return ""
+  }
+
   function runSelected(screenName) {
     if (!service) return
 
@@ -111,6 +118,8 @@ Item {
 
     if (selectedMode === "selection" && hasSelection && typeof service.screenshotGeometry === "function")
       service.screenshotGeometry(selectionGeometry(), screenName || selectionScreenName || "")
+    else if (selectedMode === "record-selection" && hasSelection && typeof service.recordGeometry === "function")
+      service.recordGeometry(selectionGeometry(), screenName || selectionScreenName || "")
     else if (selectedMode === "record-screen") service.record("screen")
     else if (selectedMode === "record-selection") service.record("selection")
     else service.screenshot(selectedMode)
@@ -911,25 +920,86 @@ Item {
       anchors.fill: parent
       color: Color.menu.scrim
       opacity: 0.72
-      visible: !root.regionEditor
+      visible: !root.regionEditor && root.selectedMode !== "screen"
     }
 
     MouseArea {
+      id: backgroundGesture
+
+      property bool dragging: false
+      property real pressedX: 0
+      property real pressedY: 0
+      readonly property real dragThreshold: Style.space(4)
+
       anchors.fill: parent
-      visible: !root.regionEditor
-      onClicked: root.dismiss()
+      visible: !root.regionEditor || dragging
+      acceptedButtons: Qt.LeftButton
+      preventStealing: true
+      cursorShape: dragging ? Qt.CrossCursor : Qt.ArrowCursor
+
+      onPressed: function(mouse) {
+        dragging = false
+        pressedX = mouse.x
+        pressedY = mouse.y
+      }
+
+      onPositionChanged: function(mouse) {
+        if (!(mouse.buttons & Qt.LeftButton)) return
+
+        if (!dragging) {
+          var distance = Math.abs(mouse.x - pressedX) + Math.abs(mouse.y - pressedY)
+          if (distance < dragThreshold) return
+
+          var nextMode = root.regionModeForDrag()
+          if (nextMode === "") return
+
+          dragging = true
+          root.setMode(nextMode)
+          keyCatcher.forceActiveFocus()
+          root.beginPointer("draw", pressedX, pressedY, width, height, panel.currentScreenName)
+        }
+
+        root.updatePointer(mouse.x, mouse.y, width, height)
+        mouse.accepted = true
+      }
+
+      onReleased: function(mouse) {
+        if (!dragging) {
+          root.dismiss()
+          return
+        }
+
+        root.finishPointer()
+        dragging = false
+        mouse.accepted = true
+      }
+
+      onCanceled: {
+        if (dragging) root.finishPointer()
+        dragging = false
+      }
     }
 
     component ResizeHandle: Rectangle {
       required property string edge
       property int cursor: Qt.ArrowCursor
+      readonly property bool onLeft: edge.indexOf("w") >= 0
+      readonly property bool onRight: edge.indexOf("e") >= 0
+      readonly property bool onTop: edge.indexOf("n") >= 0
+      readonly property bool onBottom: edge.indexOf("s") >= 0
 
       width: Math.max(10, Style.space(10))
       height: width
-      radius: width / 2
+      x: onLeft ? -width + root.regionBorderWidth
+        : onRight ? parent.width - root.regionBorderWidth
+        : parent.width / 2 - width / 2
+      y: onTop ? -height + root.regionBorderWidth
+        : onBottom ? parent.height - root.regionBorderWidth
+        : parent.height / 2 - height / 2
+      radius: 0
       color: Color.menu.background
       border.color: Color.accent
-      border.width: Math.max(1, Style.normalBorderWidth)
+      border.width: root.regionBorderWidth
       z: 2
 
       MouseArea {
@@ -1037,7 +1107,7 @@ Item {
         visible: root.showSelectionFrame
         color: Util.alpha(Color.accent, 0.10)
         border.color: Color.accent
-        border.width: Math.max(1, Style.normalBorderWidth)
+        border.width: root.regionBorderWidth
 
         MouseArea {
           anchors.fill: parent
@@ -1063,57 +1133,41 @@ Item {
         ResizeHandle {
           edge: "nw"
           cursor: Qt.SizeFDiagCursor
-          x: -width / 2
-          y: -height / 2
         }
 
         ResizeHandle {
           edge: "n"
           cursor: Qt.SizeVerCursor
-          x: selectionBox.width / 2 - width / 2
-          y: -height / 2
         }
 
         ResizeHandle {
           edge: "ne"
           cursor: Qt.SizeBDiagCursor
-          x: selectionBox.width - width / 2
-          y: -height / 2
         }
 
         ResizeHandle {
           edge: "e"
           cursor: Qt.SizeHorCursor
-          x: selectionBox.width - width / 2
-          y: selectionBox.height / 2 - height / 2
         }
 
         ResizeHandle {
           edge: "se"
           cursor: Qt.SizeFDiagCursor
-          x: selectionBox.width - width / 2
-          y: selectionBox.height - height / 2
         }
 
         ResizeHandle {
           edge: "s"
           cursor: Qt.SizeVerCursor
-          x: selectionBox.width / 2 - width / 2
-          y: selectionBox.height - height / 2
         }
 
         ResizeHandle {
           edge: "sw"
           cursor: Qt.SizeBDiagCursor
-          x: -width / 2
-          y: selectionBox.height - height / 2
         }
 
         ResizeHandle {
           edge: "w"
           cursor: Qt.SizeHorCursor
-          x: -width / 2
-          y: selectionBox.height / 2 - height / 2
         }
       }
     }
