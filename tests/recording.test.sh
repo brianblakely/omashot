@@ -12,6 +12,7 @@ STOP_STDOUT="$TEST_ROOT/stop-stdout"
 INJECTION_SENTINEL="$TEST_ROOT/command-injection-ran"
 STOP_COMPLETE="$TEST_ROOT/stop-complete"
 ORDERING_ERROR="$TEST_ROOT/opened-before-finalization"
+TEST_HOME="$TEST_ROOT/home"
 
 cleanup() {
   rm -rf "$TEST_ROOT"
@@ -47,37 +48,41 @@ run_omashot() {
     cd "$TEST_ROOT"
     env \
       PATH="$STUB_BIN:$PATH" \
+      HOME="$TEST_HOME" \
       XDG_STATE_HOME="$STATE_ROOT" \
-      OMASHOT_TEST_RECORDING_MARKER="$RECORDING_MARKER" \
-      OMASHOT_TEST_OMACUT_LOG="$OMACUT_LOG" \
-      OMASHOT_TEST_STOP_COMPLETE="$STOP_COMPLETE" \
-      OMASHOT_TEST_ORDERING_ERROR="$ORDERING_ERROR" \
-      OMASHOT_TEST_FINALIZE_FILE="${OMASHOT_TEST_FINALIZE_FILE:-}" \
-      OMASHOT_TEST_STOP_OUTPUT="${OMASHOT_TEST_STOP_OUTPUT:-}" \
-      OMASHOT_TEST_STOP_STATUS="${OMASHOT_TEST_STOP_STATUS:-0}" \
+      TEST_RECORDING_MARKER="$RECORDING_MARKER" \
+      TEST_OMACUT_LOG="$OMACUT_LOG" \
+      TEST_STOP_COMPLETE="$STOP_COMPLETE" \
+      TEST_ORDERING_ERROR="$ORDERING_ERROR" \
+      TEST_FINALIZE_FILE="${TEST_FINALIZE_FILE:-}" \
+      TEST_STOP_OUTPUT="${TEST_STOP_OUTPUT:-}" \
+      TEST_STOP_STATUS="${TEST_STOP_STATUS:-0}" \
       "$PLUGIN_DIR/omashot" stop-recording
   )
 }
 
-mkdir -p "$STUB_BIN"
+mkdir -p "$STUB_BIN" "$TEST_HOME/.config/omarchy"
+
+jq -n '{version: 1, plugins: [{id: "b.omashot"}]}' \
+  >"$TEST_HOME/.config/omarchy/shell.json"
 
 cat >"$STUB_BIN/omarchy-capture-screenrecording" <<'STUB'
 #!/usr/bin/env bash
-if [[ -n ${OMASHOT_TEST_FINALIZE_FILE:-} ]]; then
-  printf 'video data\n' >"$OMASHOT_TEST_FINALIZE_FILE"
-  printf 'complete\n' >"$OMASHOT_TEST_STOP_COMPLETE"
+if [[ -n ${TEST_FINALIZE_FILE:-} ]]; then
+  printf 'video data\n' >"$TEST_FINALIZE_FILE"
+  printf 'complete\n' >"$TEST_STOP_COMPLETE"
 fi
-if [[ ${1:-} == --stop-recording && -n ${OMASHOT_TEST_STOP_OUTPUT:-} ]]; then
-  printf '%s\n' "$OMASHOT_TEST_STOP_OUTPUT"
+if [[ ${1:-} == --stop-recording && -n ${TEST_STOP_OUTPUT:-} ]]; then
+  printf '%s\n' "$TEST_STOP_OUTPUT"
 fi
-rm -f "$OMASHOT_TEST_RECORDING_MARKER"
-exit "${OMASHOT_TEST_STOP_STATUS:-0}"
+rm -f "$TEST_RECORDING_MARKER"
+exit "${TEST_STOP_STATUS:-0}"
 STUB
 
 cat >"$STUB_BIN/cat" <<'STUB'
 #!/usr/bin/env bash
 if [[ $# == 1 && $1 == /tmp/omarchy-screenrecord-filename ]]; then
-  exec /usr/bin/cat "$OMASHOT_TEST_RECORDING_MARKER"
+  exec /usr/bin/cat "$TEST_RECORDING_MARKER"
 fi
 exec /usr/bin/cat "$@"
 STUB
@@ -95,16 +100,16 @@ STUB
 
 cat >"$STUB_BIN/omacut" <<'STUB'
 #!/usr/bin/env bash
-if [[ ! -f $OMASHOT_TEST_STOP_COMPLETE ]]; then
-  printf 'opened too early\n' >"$OMASHOT_TEST_ORDERING_ERROR"
+if [[ ! -f $TEST_STOP_COMPLETE ]]; then
+  printf 'opened too early\n' >"$TEST_ORDERING_ERROR"
   exit 1
 fi
-tmp_log="${OMASHOT_TEST_OMACUT_LOG}.tmp.$$"
+tmp_log="${TEST_OMACUT_LOG}.tmp.$$"
 {
   printf '%s\0' "$#"
   printf '%s\0' "$@"
 } >"$tmp_log"
-mv "$tmp_log" "$OMASHOT_TEST_OMACUT_LOG"
+mv "$tmp_log" "$TEST_OMACUT_LOG"
 STUB
 
 chmod +x "$STUB_BIN"/*
@@ -112,7 +117,7 @@ chmod +x "$STUB_BIN"/*
 recording="$TEST_ROOT/screen recording \$(touch command-injection-ran);'\".mp4"
 touch "$recording"
 printf '%s\n' "$recording" >"$RECORDING_MARKER"
-OMASHOT_TEST_FINALIZE_FILE="$recording" OMASHOT_TEST_STOP_OUTPUT="$recording" \
+TEST_FINALIZE_FILE="$recording" TEST_STOP_OUTPUT="$recording" \
   run_omashot >"$STOP_STDOUT"
 
 assert_equal "$recording" "$(sed -n '1p' "$STOP_STDOUT")" \
@@ -131,8 +136,8 @@ assert_equal "$recording" \
 rm -f "$OMACUT_LOG"
 rm -f "$STOP_COMPLETE"
 printf '%s\n' "$recording" >"$RECORDING_MARKER"
-if OMASHOT_TEST_FINALIZE_FILE="$recording" OMASHOT_TEST_STOP_OUTPUT="$recording" \
-  OMASHOT_TEST_STOP_STATUS=7 run_omashot >/dev/null; then
+if TEST_FINALIZE_FILE="$recording" TEST_STOP_OUTPUT="$recording" \
+  TEST_STOP_STATUS=7 run_omashot >/dev/null; then
   fail "failed stop returned success"
 else
   assert_equal "7" "$?" "failed stop status was not preserved"
@@ -140,13 +145,13 @@ fi
 [[ ! -e $OMACUT_LOG ]] || fail "Omacut opened after a failed stop"
 
 printf '%s\n' "$recording" >"$RECORDING_MARKER"
-OMASHOT_TEST_FINALIZE_FILE="$recording" OMASHOT_TEST_STOP_OUTPUT="" \
+TEST_FINALIZE_FILE="$recording" TEST_STOP_OUTPUT="" \
   run_omashot >/dev/null
 [[ ! -e $OMACUT_LOG ]] || fail "Omacut opened without finalized-path output"
 
 missing_recording="$TEST_ROOT/missing recording.mp4"
 printf '%s\n' "$missing_recording" >"$RECORDING_MARKER"
-OMASHOT_TEST_STOP_OUTPUT="$missing_recording" run_omashot >/dev/null
+TEST_STOP_OUTPUT="$missing_recording" run_omashot >/dev/null
 [[ ! -e $OMACUT_LOG ]] || fail "Omacut opened a missing recording"
 
 printf 'PASS: completed recording handoff\n'

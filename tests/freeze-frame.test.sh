@@ -7,6 +7,7 @@ TEST_ROOT=$(mktemp -d)
 STUB_BIN="$TEST_ROOT/bin"
 STATE_ROOT="$TEST_ROOT/state"
 OUTPUT_DIR="$TEST_ROOT/output"
+TEST_HOME="$TEST_ROOT/home"
 GRIM_LOG="$TEST_ROOT/grim-log"
 GRIM_FREEZE_MARKER="$TEST_ROOT/grim-saw-freeze"
 INTERNAL_FREEZE_PID_FILE="$TEST_ROOT/internal-freeze-pid"
@@ -42,21 +43,31 @@ assert_stopped() {
   fail "$message"
 }
 
-mkdir -p "$STUB_BIN" "$OUTPUT_DIR"
+mkdir -p "$STUB_BIN" "$OUTPUT_DIR" "$TEST_HOME/.config/omarchy"
+
+jq -n --arg output "$OUTPUT_DIR" '{
+  version: 1,
+  plugins: [{
+    id: "b.omashot",
+    outputMode: "file",
+    saveLocation: $output,
+    timerSeconds: 0
+  }]
+}' >"$TEST_HOME/.config/omarchy/shell.json"
 
 cat >"$STUB_BIN/grim" <<'STUB'
 #!/usr/bin/env bash
-freeze_pid="${OMASHOT_TEST_EXPECTED_FREEZE_PID:-}"
-if [[ -z $freeze_pid && -f ${OMASHOT_TEST_INTERNAL_FREEZE_PID_FILE:-} ]]; then
-  freeze_pid=$(<"$OMASHOT_TEST_INTERNAL_FREEZE_PID_FILE")
+freeze_pid="${TEST_EXPECTED_FREEZE_PID:-}"
+if [[ -z $freeze_pid && -f ${TEST_INTERNAL_FREEZE_PID_FILE:-} ]]; then
+  freeze_pid=$(<"$TEST_INTERNAL_FREEZE_PID_FILE")
 fi
 
 [[ $freeze_pid =~ ^[1-9][0-9]*$ ]] || exit 90
 kill -0 "$freeze_pid" 2>/dev/null || exit 91
-printf 'alive\n' >>"$OMASHOT_TEST_GRIM_FREEZE_MARKER"
-printf '%s\n' "$*" >>"$OMASHOT_TEST_GRIM_LOG"
+printf 'alive\n' >>"$TEST_GRIM_FREEZE_MARKER"
+printf '%s\n' "$*" >>"$TEST_GRIM_LOG"
 
-if [[ ${OMASHOT_TEST_GRIM_FAIL:-false} == true ]]; then
+if [[ ${TEST_GRIM_FAIL:-false} == true ]]; then
   exit 7
 fi
 
@@ -66,7 +77,7 @@ STUB
 
 cat >"$STUB_BIN/hyprpicker" <<'STUB'
 #!/usr/bin/env bash
-printf '%s\n' "$$" >"$OMASHOT_TEST_INTERNAL_FREEZE_PID_FILE"
+printf '%s\n' "$$" >"$TEST_INTERNAL_FREEZE_PID_FILE"
 exec sleep 30
 STUB
 
@@ -90,36 +101,31 @@ chmod +x "$STUB_BIN"/*
 run_screenshot() {
   env \
     PATH="$STUB_BIN:$PATH" \
+    HOME="$TEST_HOME" \
     XDG_STATE_HOME="$STATE_ROOT" \
-    OMASHOT_TEST_GRIM_LOG="$GRIM_LOG" \
-    OMASHOT_TEST_GRIM_FREEZE_MARKER="$GRIM_FREEZE_MARKER" \
-    OMASHOT_TEST_INTERNAL_FREEZE_PID_FILE="$INTERNAL_FREEZE_PID_FILE" \
-    OMASHOT_TEST_EXPECTED_FREEZE_PID="${OMASHOT_TEST_EXPECTED_FREEZE_PID:-}" \
-    OMASHOT_TEST_GRIM_FAIL="${OMASHOT_TEST_GRIM_FAIL:-false}" \
+    TEST_GRIM_LOG="$GRIM_LOG" \
+    TEST_GRIM_FREEZE_MARKER="$GRIM_FREEZE_MARKER" \
+    TEST_INTERNAL_FREEZE_PID_FILE="$INTERNAL_FREEZE_PID_FILE" \
+    TEST_EXPECTED_FREEZE_PID="${TEST_EXPECTED_FREEZE_PID:-}" \
+    TEST_GRIM_FAIL="${TEST_GRIM_FAIL:-false}" \
     "$PLUGIN_DIR/omashot" "$@"
 }
 
 sleep 30 &
 external_freeze_pid=$!
 RUNNING_PIDS+=("$external_freeze_pid")
-OMASHOT_TEST_EXPECTED_FREEZE_PID="$external_freeze_pid" \
-  run_screenshot screenshot selection \
-    --geometry="10,20 30x40" \
-    --freeze-pid="$external_freeze_pid" \
-    --output-mode=file \
-    --save-location="$OUTPUT_DIR" \
-    --settle=0 >/dev/null
+context=$(jq -cn --arg geometry "10,20 30x40" --argjson freezePid "$external_freeze_pid" \
+  '{geometry:$geometry,freezePid:$freezePid}')
+TEST_EXPECTED_FREEZE_PID="$external_freeze_pid" \
+  run_screenshot screenshot selection "$context" >/dev/null
 
 assert_stopped "$external_freeze_pid" "external freeze survived a successful capture"
 [[ -s $GRIM_FREEZE_MARKER ]] || fail "grim did not see the external freeze"
 grep -Fq -- '-g 10,20 30x40' "$GRIM_LOG" || fail "grim received the wrong geometry"
 
 rm -f "$INTERNAL_FREEZE_PID_FILE"
-OMASHOT_TEST_EXPECTED_FREEZE_PID="" \
-  run_screenshot screenshot selection \
-    --output-mode=file \
-    --save-location="$OUTPUT_DIR" \
-    --settle=0 >/dev/null
+TEST_EXPECTED_FREEZE_PID="" \
+  run_screenshot screenshot selection '{}' >/dev/null
 
 internal_freeze_pid=$(<"$INTERNAL_FREEZE_PID_FILE")
 assert_stopped "$internal_freeze_pid" "picker freeze survived a successful capture"
@@ -127,13 +133,10 @@ assert_stopped "$internal_freeze_pid" "picker freeze survived a successful captu
 sleep 30 &
 failed_freeze_pid=$!
 RUNNING_PIDS+=("$failed_freeze_pid")
-if OMASHOT_TEST_EXPECTED_FREEZE_PID="$failed_freeze_pid" OMASHOT_TEST_GRIM_FAIL=true \
-  run_screenshot screenshot selection \
-    --geometry="1,2 3x4" \
-    --freeze-pid="$failed_freeze_pid" \
-    --output-mode=file \
-    --save-location="$OUTPUT_DIR" \
-    --settle=0 >/dev/null; then
+context=$(jq -cn --arg geometry "1,2 3x4" --argjson freezePid "$failed_freeze_pid" \
+  '{geometry:$geometry,freezePid:$freezePid}')
+if TEST_EXPECTED_FREEZE_PID="$failed_freeze_pid" TEST_GRIM_FAIL=true \
+  run_screenshot screenshot selection "$context" >/dev/null; then
   fail "failed grim capture returned success"
 fi
 

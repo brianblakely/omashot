@@ -23,7 +23,6 @@ Item {
   readonly property bool recordDesktopAudio: setting("recordDesktopAudio", false) === true
   readonly property bool recordMicrophoneAudio: setting("recordMicrophoneAudio", false) === true
   readonly property bool recordWebcam: setting("recordWebcam", false) === true
-  readonly property string editorCommand: setting("editorCommand", "tensaku-edit")
 
   property bool recording: false
   property string lastStatus: "{}"
@@ -64,32 +63,18 @@ Item {
     return shell.updateEntryInline(pluginId, next)
   }
 
-  function boolArg(name, value) {
-    return "--" + name + "=" + (value === true ? "true" : "false")
-  }
-
-  function commonArgs(outputOverride) {
-    return [
-      "--output-mode=" + String(outputOverride || outputMode),
-      "--save-location=" + String(saveLocation || "pictures"),
-      "--timer=" + String(timerSeconds),
-      boolArg("cursor", includeCursor),
-      "--editor=" + String(editorCommand || "tensaku-edit")
-    ]
-  }
-
-  function freezeArgs(freezePid) {
+  function captureContext(geometry, screenName, outputOverride, freezePid) {
+    var context = ({})
+    var selectedGeometry = String(geometry || "").replace(/^\s+|\s+$/g, "")
+    var selectedScreen = String(screenName || "")
+    var selectedOutput = String(outputOverride || "")
     var pid = Math.floor(Number(freezePid))
-    if (!isFinite(pid) || pid <= 0) return []
-    return ["--freeze-pid=" + String(pid)]
-  }
 
-  function recordingArgs() {
-    var args = commonArgs("")
-    if (recordDesktopAudio) args.push("--desktop-audio")
-    if (recordMicrophoneAudio) args.push("--microphone-audio")
-    if (recordWebcam) args.push("--webcam")
-    return args
+    if (selectedGeometry !== "") context.geometry = selectedGeometry
+    if (selectedScreen !== "") context.screenName = selectedScreen
+    if (selectedOutput !== "") context.action = selectedOutput
+    if (isFinite(pid) && pid > 0) context.freezePid = pid
+    return JSON.stringify(context)
   }
 
   function runDetached(args) {
@@ -139,7 +124,7 @@ Item {
     var target = String(mode || captureMode || "selection")
     saveSettings({ captureMode: target })
     hide()
-    return runDetached(["screenshot", target].concat(freezeArgs(freezePid)).concat(commonArgs(outputOverride || "")))
+    return runDetached(["screenshot", target, captureContext("", "", outputOverride, freezePid)])
   }
 
   function screenshotGeometry(geometry, screenName, outputOverride, captureModeOverride, freezePid) {
@@ -149,9 +134,8 @@ Item {
     saveSettings({ captureMode: String(captureModeOverride || "selection") })
     hide()
 
-    var args = ["screenshot", "selection", "--geometry=" + selectedGeometry]
-    if (screenName) args.push("--screen-name=" + String(screenName))
-    return runDetached(args.concat(freezeArgs(freezePid)).concat(commonArgs(outputOverride || "")))
+    return runDetached(["screenshot", "selection",
+      captureContext(selectedGeometry, screenName, outputOverride, freezePid)])
   }
 
   function recordGeometry(geometry, screenName) {
@@ -161,16 +145,14 @@ Item {
     saveSettings({ captureMode: "record-selection" })
     hide()
 
-    var args = ["record", "selection", "--geometry=" + selectedGeometry]
-    if (screenName) args.push("--screen-name=" + String(screenName))
-    return runDetached(args.concat(recordingArgs()))
+    return runDetached(["record", "selection", captureContext(selectedGeometry, screenName, "", "")])
   }
 
   function record(mode) {
     var target = String(mode || "selection")
     saveSettings({ captureMode: target === "screen" ? "record-screen" : "record-selection" })
     hide()
-    return runDetached(["record", target].concat(recordingArgs()))
+    return runDetached(["record", target, captureContext("", "", "", "")])
   }
 
   function stopRecording() {
@@ -180,7 +162,7 @@ Item {
 
   function toggleRecording() {
     hide()
-    return runDetached(["toggle-recording", "selection"].concat(recordingArgs()))
+    return runDetached(["toggle-recording", "selection", captureContext("", "", "", "")])
   }
 
   function captureToFile() {

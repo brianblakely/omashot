@@ -4,7 +4,9 @@ Omashot is a screenshot and screen-recording overlay inspired by macOS and Spect
 
 ## Annotations and Editing
 
-Omashot uses Omarchy's built-in tools, which do what they do best. To annotate a screenshot, first select `Save: Editor` from the toolbar. All completed screen recordings open automatically in Omacut. If you have a workflow that involves Pinta or GIMP, you can change the editing tools used in `~/.config/omarchy/shell.json`.
+Omashot uses Omarchy's built-in tools, which do what they do best. To annotate a screenshot, first select `Save: Editor` from the toolbar. If you have a workflow that involves Pinta, GIMP, et al, you can set `editorCommand` in `~/.config/omarchy/shell.json`.
+
+All completed screen recordings open automatically in Omacut.
 
 ## Install
 

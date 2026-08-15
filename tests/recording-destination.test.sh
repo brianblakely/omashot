@@ -27,36 +27,46 @@ assert_equal() {
     fail "$message (expected '$expected', got '$actual')"
 }
 
-mkdir -p "$STUB_BIN" "$TEST_HOME"
+mkdir -p "$STUB_BIN" "$TEST_HOME/.config/omarchy"
 
 cat >"$STUB_BIN/omarchy-capture-screenrecording" <<'STUB'
 #!/usr/bin/env bash
-printf '%s\n' "$OMARCHY_SCREENRECORD_DIR" >"$OMASHOT_TEST_DESTINATION_LOG"
+printf '%s\n' "$OMARCHY_SCREENRECORD_DIR" >"$TEST_DESTINATION_LOG"
 STUB
 
 chmod +x "$STUB_BIN/omarchy-capture-screenrecording"
 
 run_recording() {
   env \
-    -u OMASHOT_RECORDING_DIR \
     -u OMARCHY_SCREENRECORD_DIR \
     PATH="$STUB_BIN:$PATH" \
     HOME="$TEST_HOME" \
     XDG_VIDEOS_DIR="$VIDEOS_DIR" \
     XDG_DESKTOP_DIR="$DESKTOP_DIR" \
-    OMASHOT_TEST_DESTINATION_LOG="$DESTINATION_LOG" \
-    "$PLUGIN_DIR/omashot" record screen --settle=0 "$@"
+    TEST_DESTINATION_LOG="$DESTINATION_LOG" \
+    "$PLUGIN_DIR/omashot" record screen
 }
 
-run_recording --save-location=pictures
+write_settings() {
+  local location="$1"
+  jq -n --arg location "$location" '{
+    version: 1,
+    plugins: [{id: "b.omashot", saveLocation: $location}]
+  }' >"$TEST_HOME/.config/omarchy/shell.json"
+}
+
+write_settings pictures
+run_recording
 assert_equal "$VIDEOS_DIR" "$(<"$DESTINATION_LOG")" \
   "the recording-mode Pictures entry did not resolve to Videos"
 
-run_recording --save-location=videos
+write_settings videos
+run_recording
 assert_equal "$VIDEOS_DIR" "$(<"$DESTINATION_LOG")" \
   "the Videos destination did not resolve to the XDG Videos directory"
 
-run_recording --save-location=desktop
+write_settings desktop
+run_recording
 assert_equal "$DESKTOP_DIR" "$(<"$DESTINATION_LOG")" \
   "the recording destination ignored Desktop"
 

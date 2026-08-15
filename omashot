@@ -3,6 +3,8 @@
 set -o pipefail
 
 APP_NAME="Omashot"
+PLUGIN_ID="b.omashot"
+SHELL_CONFIG_FILE="$HOME/.config/omarchy/shell.json"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omashot"
 STATE_FILE="$STATE_DIR/state.json"
 TMP_DIR="${TMPDIR:-/tmp}"
@@ -10,26 +12,22 @@ RECORDING_FILE="/tmp/omarchy-screenrecord-filename"
 RECORDING_ESCAPE_MARKER="$STATE_DIR/recording-escape-bound"
 
 COMMAND="${1:-help}"
-shift || true
-
-TARGET="${1:-selection}"
-if [[ $TARGET == --* || -z $TARGET ]]; then
-  TARGET="selection"
-else
-  shift || true
-fi
+TARGET="${2:-selection}"
+CAPTURE_CONTEXT="${3:-}"
+[[ -n $CAPTURE_CONTEXT ]] || CAPTURE_CONTEXT='{}'
 
 OUTPUT_MODE="file-and-clipboard"
 SAVE_LOCATION="pictures"
 TIMER_SECONDS=0
 INCLUDE_CURSOR="false"
 SETTLE_SECONDS="0.15"
-SCREENSHOT_EDITOR="${OMASHOT_EDITOR:-${OMARCHY_SCREENSHOT_EDITOR:-tensaku-edit}}"
+SCREENSHOT_EDITOR="tensaku-edit"
 DESKTOP_AUDIO="false"
 MICROPHONE_AUDIO="false"
 WEBCAM="false"
 GEOMETRY=""
 SCREEN_NAME=""
+CAPTURE_ACTION=""
 # A freeze handed off by the overlay remains visible through grim and becomes
 # this process's responsibility to stop, including on failure.
 CAPTURE_FREEZE_PID=""
@@ -50,79 +48,77 @@ truthy() {
   esac
 }
 
-take_value() {
-  local arg="$1"
-  local next="${2:-}"
-  if [[ $arg == *=* ]]; then
-    printf '%s\n' "${arg#*=}"
-  else
-    printf '%s\n' "$next"
-  fi
+shell_setting_string() {
+  local key="$1" fallback="$2"
+  jq -r --arg key "$key" --arg fallback "$fallback" '
+    if (.[$key] | type) == "string" then .[$key] else $fallback end
+  ' <<<"$PLUGIN_SETTINGS"
 }
 
-while (($# > 0)); do
-  case "$1" in
-  --output-mode | --output-mode=*)
-    OUTPUT_MODE=$(take_value "$1" "${2:-}")
-    [[ $1 == *=* ]] && shift || shift 2
-    ;;
-  --save-location | --save-location=*)
-    SAVE_LOCATION=$(take_value "$1" "${2:-}")
-    [[ $1 == *=* ]] && shift || shift 2
-    ;;
-  --timer | --timer=*)
-    TIMER_SECONDS=$(take_value "$1" "${2:-}")
-    [[ $1 == *=* ]] && shift || shift 2
-    ;;
-  --cursor | --cursor=*)
-    INCLUDE_CURSOR=$(take_value "$1" "${2:-}")
-    [[ $1 == *=* ]] && shift || shift 2
-    ;;
-  --settle | --settle=*)
-    SETTLE_SECONDS=$(take_value "$1" "${2:-}")
-    [[ $1 == *=* ]] && shift || shift 2
-    ;;
-  --editor | --editor=*)
-    SCREENSHOT_EDITOR=$(take_value "$1" "${2:-}")
-    [[ $1 == *=* ]] && shift || shift 2
-    ;;
-  --desktop-audio | --with-desktop-audio)
-    DESKTOP_AUDIO="true"
-    shift
-    ;;
-  --microphone-audio | --with-microphone-audio)
-    MICROPHONE_AUDIO="true"
-    shift
-    ;;
-  --webcam | --with-webcam)
-    WEBCAM="true"
-    shift
-    ;;
-  --geometry | --geometry=*)
-    GEOMETRY=$(take_value "$1" "${2:-}")
-    [[ $1 == *=* ]] && shift || shift 2
-    ;;
-  --screen-name | --screen-name=*)
-    SCREEN_NAME=$(take_value "$1" "${2:-}")
-    [[ $1 == *=* ]] && shift || shift 2
-    ;;
-  --freeze-pid | --freeze-pid=*)
-    CAPTURE_FREEZE_PID=$(take_value "$1" "${2:-}")
-    [[ $CAPTURE_FREEZE_PID =~ ^[1-9][0-9]*$ ]] || fail "invalid freeze process id"
-    [[ $1 == *=* ]] && shift || shift 2
-    ;;
-  *)
-    shift
-    ;;
-  esac
-done
+shell_setting_boolean() {
+  local key="$1"
+  jq -r --arg key "$key" 'if .[$key] == true then "true" else "false" end' \
+    <<<"$PLUGIN_SETTINGS"
+}
+
+load_shell_settings() {
+  local settings='{}'
+  if [[ -r $SHELL_CONFIG_FILE ]]; then
+    settings=$(jq -c --arg id "$PLUGIN_ID" '
+      first(.plugins[]? | select(.id == $id)) // {}
+    ' "$SHELL_CONFIG_FILE" 2>/dev/null) || settings='{}'
+  fi
+  PLUGIN_SETTINGS="$settings"
+
+  OUTPUT_MODE=$(shell_setting_string outputMode "$OUTPUT_MODE")
+  SAVE_LOCATION=$(shell_setting_string saveLocation "$SAVE_LOCATION")
+  TIMER_SECONDS=$(jq -r 'if (.timerSeconds | type) == "number" then .timerSeconds else 0 end' \
+    <<<"$PLUGIN_SETTINGS")
+  INCLUDE_CURSOR=$(shell_setting_boolean includeCursor)
+  SCREENSHOT_EDITOR=$(shell_setting_string editorCommand "$SCREENSHOT_EDITOR")
+  DESKTOP_AUDIO=$(shell_setting_boolean recordDesktopAudio)
+  MICROPHONE_AUDIO=$(shell_setting_boolean recordMicrophoneAudio)
+  WEBCAM=$(shell_setting_boolean recordWebcam)
+}
+
+capture_context_string() {
+  local key="$1"
+  jq -r --arg key "$key" 'if (.[$key] | type) == "string" then .[$key] else "" end' \
+    <<<"$CAPTURE_CONTEXT"
+}
+
+load_capture_context() {
+  (($# <= 3)) || fail "unexpected arguments; configure Omashot in $SHELL_CONFIG_FILE"
+  [[ $TARGET != --* ]] || fail "options are not supported; configure Omashot in $SHELL_CONFIG_FILE"
+  jq -e 'type == "object"' <<<"$CAPTURE_CONTEXT" >/dev/null 2>&1 ||
+    fail "capture context must be a JSON object"
+
+  local unknown_keys
+  unknown_keys=$(jq -r 'keys - ["action", "freezePid", "geometry", "screenName"] | join(", ")' \
+    <<<"$CAPTURE_CONTEXT")
+  [[ -z $unknown_keys ]] || fail "unknown capture context: $unknown_keys"
+
+  CAPTURE_ACTION=$(capture_context_string action)
+  GEOMETRY=$(capture_context_string geometry)
+  SCREEN_NAME=$(capture_context_string screenName)
+  CAPTURE_FREEZE_PID=$(jq -r '
+    if .freezePid == null then "" else (.freezePid | tostring) end
+  ' <<<"$CAPTURE_CONTEXT")
+  [[ -z $CAPTURE_FREEZE_PID || $CAPTURE_FREEZE_PID =~ ^[1-9][0-9]*$ ]] ||
+    fail "invalid freeze process id"
+}
+
+require_command jq
+load_shell_settings
+load_capture_context "$@"
 
 load_user_dirs() {
   [[ -f "$HOME/.config/user-dirs.dirs" ]] && source "$HOME/.config/user-dirs.dirs"
 }
 
 normalize_output_mode() {
-  case "${OUTPUT_MODE,,}" in
+  local requested="${CAPTURE_ACTION:-$OUTPUT_MODE}"
+  case "${requested,,}" in
   copy | clipboard) printf '%s\n' "clipboard" ;;
   save | file) printf '%s\n' "file" ;;
   edit | editor | preview) printf '%s\n' "editor" ;;
@@ -138,23 +134,14 @@ directory_for_location() {
   desktop) printf '%s\n' "${XDG_DESKTOP_DIR:-$HOME/Desktop}" ;;
   documents) printf '%s\n' "${XDG_DOCUMENTS_DIR:-$HOME/Documents}" ;;
   downloads) printf '%s\n' "${XDG_DOWNLOAD_DIR:-$HOME/Downloads}" ;;
-  videos) printf '%s\n' "${OMASHOT_RECORDING_DIR:-${OMARCHY_SCREENRECORD_DIR:-${XDG_VIDEOS_DIR:-$HOME/Videos}}}" ;;
+  videos) printf '%s\n' "${XDG_VIDEOS_DIR:-$HOME/Videos}" ;;
   /*) printf '%s\n' "$SAVE_LOCATION" ;;
-  *) printf '%s\n' "${OMASHOT_SCREENSHOT_DIR:-${OMARCHY_SCREENSHOT_DIR:-${XDG_PICTURES_DIR:-$HOME/Pictures}}}" ;;
+  *) printf '%s\n' "${XDG_PICTURES_DIR:-$HOME/Pictures}" ;;
   esac
 }
 
 recording_directory() {
   load_user_dirs
-
-  if [[ -n ${OMASHOT_RECORDING_DIR:-} ]]; then
-    printf '%s\n' "$OMASHOT_RECORDING_DIR"
-    return
-  fi
-  if [[ -n ${OMARCHY_SCREENRECORD_DIR:-} ]]; then
-    printf '%s\n' "$OMARCHY_SCREENRECORD_DIR"
-    return
-  fi
 
   case "${SAVE_LOCATION,,}" in
   desktop) printf '%s\n' "${XDG_DESKTOP_DIR:-$HOME/Desktop}" ;;
@@ -773,21 +760,12 @@ open-last)
 help | -h | --help | *)
   cat <<USAGE
 Usage:
-  omashot screenshot [screen|display|region|window|active-window|last|smart] [options]
-  omashot record [screen|region] [options]
+  omashot screenshot [screen|display|region|window|active-window|last|smart]
+  omashot record [screen|region]
   omashot stop-recording
   omashot status
 
-Options:
-  --output-mode=file-and-clipboard|file|clipboard|editor
-  --save-location=pictures|desktop|documents|downloads|/absolute/path
-  --timer=0|5|10
-  --cursor=true|false
-  --geometry='x,y WIDTHxHEIGHT'
-  --screen-name=MONITOR
-  --desktop-audio
-  --microphone-audio
-  --webcam
+Configure Omashot in $SHELL_CONFIG_FILE under the "$PLUGIN_ID" plugin entry.
 USAGE
   ;;
 esac
