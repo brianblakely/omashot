@@ -12,6 +12,7 @@ omarchy plugin add https://github.com/brianblakely/omashot.git
 
 * Press `Space` to capture the screen.
 * Press `Enter` to capture the focused window.
+* Press `Escape` during a recording to stop and save it.
 * Use the arrow keys or `HJKL` to move a region by one pixel.
 * Hold `Alt` while moving or resizing to use ten-pixel increments.
 * Hold `Shift` to grow the addressed edge.

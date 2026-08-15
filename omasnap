@@ -7,6 +7,7 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omasnap"
 STATE_FILE="$STATE_DIR/state.json"
 TMP_DIR="${TMPDIR:-/tmp}"
 RECORDING_FILE="/tmp/omarchy-screenrecord-filename"
+RECORDING_ESCAPE_MARKER="$STATE_DIR/recording-escape-bound"
 
 COMMAND="${1:-help}"
 shift || true
@@ -539,6 +540,27 @@ recording_active() {
   pgrep -f "^gpu-screen-recorder" >/dev/null 2>&1
 }
 
+install_recording_escape_binding() {
+  command -v hyprctl >/dev/null 2>&1 || return 0
+  mkdir -p "$STATE_DIR" 2>/dev/null || return 0
+
+  local lua
+  lua='if omasnap_recording_escape_bind then omasnap_recording_escape_bind:unbind() end; omasnap_recording_escape_bind = hl.bind("ESCAPE", hl.dsp.exec_cmd("omarchy-shell b.omashot stopRecording"), { description = "Stop Omashot recording" })'
+  if hyprctl eval "$lua" >/dev/null 2>&1; then
+    : >"$RECORDING_ESCAPE_MARKER"
+  fi
+}
+
+remove_recording_escape_binding() {
+  [[ -e $RECORDING_ESCAPE_MARKER ]] || return 0
+
+  if command -v hyprctl >/dev/null 2>&1; then
+    hyprctl eval 'if omasnap_recording_escape_bind then omasnap_recording_escape_bind:unbind(); omasnap_recording_escape_bind = nil end' \
+      >/dev/null 2>&1 || return 0
+  fi
+  rm -f -- "$RECORDING_ESCAPE_MARKER"
+}
+
 cleanup_webcam() {
   pkill -f "WebcamOverlay" 2>/dev/null || true
 }
@@ -637,6 +659,7 @@ record_geometry() {
     printf '%s\n' "$filename" >"$RECORDING_FILE"
     write_state "" "" "$filename"
     refresh_recording_indicator
+    install_recording_escape_binding
   fi
 }
 
@@ -666,9 +689,15 @@ record_screen() {
   truthy "$WEBCAM" && args+=(--with-webcam)
 
   OMARCHY_SCREENRECORD_DIR="$output_dir" omarchy-capture-screenrecording "${args[@]}"
+  local status=$?
+  if ((status == 0)) && recording_active; then
+    install_recording_escape_binding
+  fi
+  return "$status"
 }
 
 stop_recording() {
+  remove_recording_escape_binding
   require_command omarchy-capture-screenrecording
   local filename status
   filename=$(cat "$RECORDING_FILE" 2>/dev/null)
@@ -688,13 +717,21 @@ stop_recording() {
 
   rm -f -- "$STOP_OUTPUT_FILE"
   STOP_OUTPUT_FILE=""
+  if recording_active; then install_recording_escape_binding; fi
   return "$status"
 }
 
 status_json() {
+  local is_recording="false"
+  if recording_active; then
+    is_recording="true"
+  else
+    remove_recording_escape_binding
+  fi
+
   mkdir -p "$STATE_DIR" 2>/dev/null || true
   jq -n \
-    --argjson recording "$(recording_active && printf true || printf false)" \
+    --argjson recording "$is_recording" \
     --arg lastSelection "$(last_state_value lastSelection)" \
     --arg lastScreenshot "$(last_state_value lastScreenshot)" \
     --arg lastRecording "$(last_state_value lastRecording)" \

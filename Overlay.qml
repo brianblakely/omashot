@@ -49,12 +49,17 @@ Item {
   property int windowTargetH: 1
   property string windowTargetScreenName: ""
 
+  readonly property string screenRecordingIcon: "󰻂" // Omarchy bar recording indicator
+  readonly property string regionRecordingIcon: "" // nf-cod-record
+  readonly property string recordingPlayIcon: "󰐊" // nf-md-play
+  readonly property string recordingStopIcon: "󰓛" // nf-md-stop
+
   readonly property var captureModes: [
     { value: "screen", label: "Screen", icon: "󰍹" },
     { value: "window", label: "Window", icon: "󰖲" },
     { value: "selection", label: "Region", icon: "󰆞" },
-    { value: "record-screen", label: "Record Screen", icon: "󰑋" },
-    { value: "record-selection", label: "Record Region", icon: "󰻂" }
+    { value: "record-screen", label: "Record Screen", icon: screenRecordingIcon },
+    { value: "record-selection", label: "Record Region", icon: regionRecordingIcon }
   ]
 
   readonly property bool recordingMode: selectedMode === "record-screen" || selectedMode === "record-selection"
@@ -64,6 +69,9 @@ Item {
   readonly property bool targetDiscoveryMode: pickerMode || windowMode
   readonly property bool windowTargetVisible: windowMode && hasWindowTarget
   readonly property bool regionEditor: selectedMode === "selection" || selectedMode === "record-selection" || pickerMode
+  readonly property bool regionActionRequiresSelection: regionOnlyPicker
+    || (!pickerMode && (selectedMode === "selection" || selectedMode === "record-selection"))
+  readonly property bool canRunSelected: recording || !regionActionRequiresSelection || hasSelection
   readonly property bool showSelectionFrame: hasSelection && (!pickerMode || targetKind === "region")
   readonly property int minimumSelectionSize: 1
   readonly property real pointerDragThreshold: Style.space(4)
@@ -116,6 +124,15 @@ Item {
     else close()
   }
 
+  function handleEscape() {
+    if (recording && service && typeof service.stopRecording === "function") {
+      service.stopRecording()
+      return
+    }
+
+    dismiss()
+  }
+
   function setMode(mode) {
     selectedMode = String(mode || "selection")
     if (service && typeof service.setCaptureMode === "function")
@@ -158,6 +175,9 @@ Item {
       service.stopRecording()
       return
     }
+
+    if ((selectedMode === "selection" || selectedMode === "record-selection") && !hasSelection)
+      return
 
     if (selectedMode === "selection" && hasSelection)
       takeGeometryScreenshot(selectionGeometry(), screenName || selectionScreenName || "")
@@ -691,6 +711,11 @@ Item {
   }
 
   function captureFocusedWindowOrRegion(screenName, maxWidth, maxHeight) {
+    if (regionOnlyPicker) {
+      if (targetKind === "region" && hasSelection) captureCurrentTarget(screenName)
+      return
+    }
+
     if (targetKind === "screen" || targetKind === "window" || targetKind === "region") {
       captureCurrentTarget(screenName)
       return
@@ -914,7 +939,8 @@ Item {
         Keys.priority: Keys.BeforeItem
         Keys.onPressed: function(event) {
           if (event.key === Qt.Key_Escape) {
-            popup.close()
+            if (root.recording) root.handleEscape()
+            else popup.close()
             event.accepted = true
           } else if (event.key === Qt.Key_Down || event.text === "j") {
             optionList.currentIndex = Math.min(iconDropdown.options.length - 1, optionList.currentIndex + 1)
@@ -1419,14 +1445,11 @@ Item {
       Keys.priority: Keys.BeforeItem
       Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape) {
-          root.dismiss()
+          root.handleEscape()
           event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
           if (root.pickerMode) root.captureFocusedWindowOrRegion(panel.currentScreenName, panel.width, panel.height)
-          else {
-            if (root.regionEditor) root.ensureSelection(panel.width, panel.height, panel.currentScreenName)
-            root.runSelected(panel.currentScreenName)
-          }
+          else root.runSelected(panel.currentScreenName)
           event.accepted = true
         } else if (root.regionEditor && root.handleSelectionKey(event, panel.width, panel.height, panel.currentScreenName)) {
           event.accepted = true
@@ -1588,13 +1611,17 @@ Item {
         GroupGap {}
 
         MenuButton {
-          iconText: root.recording ? "󰓛" : (root.recordingMode ? "󰑋" : "")
-          tooltipText: root.recording ? "Stop recording" : (root.recordingMode ? "Record" : "Capture")
+          iconText: root.recording ? root.recordingStopIcon
+            : root.recordingMode ? root.recordingPlayIcon
+            : ""
+          tooltipText: !root.canRunSelected ? "Draw a region first"
+            : root.recording ? "Stop recording"
+            : root.recordingMode ? "Record"
+            : "Capture"
           cta: true
-          onClicked: {
-            if (root.regionEditor) root.ensureSelection(panel.width, panel.height, panel.currentScreenName)
-            root.runSelected(panel.currentScreenName)
-          }
+          enabled: root.canRunSelected
+          opacity: enabled ? 1 : 0.45
+          onClicked: root.runSelected(panel.currentScreenName)
         }
       }
     }
