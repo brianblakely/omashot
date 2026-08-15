@@ -570,13 +570,13 @@ Item {
     return ""
   }
 
-  function moveSelection(direction, maxWidth, maxHeight) {
-    var dx = direction === "left" ? -1 : (direction === "right" ? 1 : 0)
-    var dy = direction === "up" ? -1 : (direction === "down" ? 1 : 0)
+  function moveSelection(direction, increment, maxWidth, maxHeight) {
+    var dx = direction === "left" ? -increment : (direction === "right" ? increment : 0)
+    var dy = direction === "up" ? -increment : (direction === "down" ? increment : 0)
     setSelection(selectionX + dx, selectionY + dy, selectionW, selectionH, maxWidth, maxHeight)
   }
 
-  function resizeSelectionByKey(direction, grow, maxWidth, maxHeight) {
+  function resizeSelectionByKey(direction, grow, increment, maxWidth, maxHeight) {
     if (!grow) {
       if (direction === "left") direction = "right"
       else if (direction === "right") direction = "left"
@@ -591,16 +591,16 @@ Item {
     var edge = ""
 
     if (direction === "left") {
-      left += grow ? -1 : 1
+      left += grow ? -increment : increment
       edge = "w"
     } else if (direction === "right") {
-      right += grow ? 1 : -1
+      right += grow ? increment : -increment
       edge = "e"
     } else if (direction === "up") {
-      top += grow ? -1 : 1
+      top += grow ? -increment : increment
       edge = "n"
     } else if (direction === "down") {
-      bottom += grow ? 1 : -1
+      bottom += grow ? increment : -increment
       edge = "s"
     }
 
@@ -618,8 +618,9 @@ Item {
     }
     var shift = (event.modifiers & Qt.ShiftModifier) !== 0
     var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
-    if (shift) resizeSelectionByKey(direction, !ctrl, maxWidth, maxHeight)
-    else moveSelection(direction, maxWidth, maxHeight)
+    var increment = (event.modifiers & Qt.AltModifier) !== 0 ? 10 : 1
+    if (shift) resizeSelectionByKey(direction, !ctrl, increment, maxWidth, maxHeight)
+    else moveSelection(direction, increment, maxWidth, maxHeight)
     return true
   }
 
