@@ -1,12 +1,16 @@
 # Omashot
 
-Omashot is a screenshot and screen-recording overlay inspired by macOS and Spectacle. It saves screenshots to the configured XDG directory: `Pictures` by default, and recordings to `Videos` by default.
+Omashot is a screenshot and screen-recording overlay, inspired by macOS and Spectacle.
 
 ## Annotations and Editing
 
 Omashot uses Omarchy's built-in tools, which do what they do best. To annotate a screenshot, first select `Save: Editor` from the toolbar. If you have a workflow that involves Pinta, GIMP, et al, you can set `editorCommand` in `~/.config/omarchy/shell.json`.
 
 All completed screen recordings open automatically in Omacut.
+
+![Omashot UI](preview.png)
+![Video trimming](preview2.png)
+![Screenshot annotation](preview3.png)
 
 ## Install
 
