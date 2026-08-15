@@ -26,7 +26,7 @@ Item {
 
   property bool recording: false
   property string lastStatus: "{}"
-  property var pendingScreenshotArgs: null
+  property var pendingCaptureArgs: null
 
   function clampInt(value, min, max) {
     var parsed = parseInt(value, 10)
@@ -84,7 +84,7 @@ Item {
     return "ok"
   }
 
-  function runScreenshot(args, includeDemo) {
+  function runCapture(args, includeDemo) {
     if (includeDemo !== true) {
       hide()
       return runDetached(args)
@@ -93,7 +93,7 @@ Item {
     if (!helperPath) return "missing-helper"
     if (demoScreenshotProc.running) return "busy"
 
-    pendingScreenshotArgs = args.slice(0)
+    pendingCaptureArgs = args.slice(0)
     demoScreenshotProc.command = ["bash", helperPath, "demo-screenshot"]
     demoScreenshotProc.running = true
     return "ok"
@@ -139,7 +139,7 @@ Item {
   function screenshot(mode, outputOverride, freezePid, includeDemo) {
     var target = String(mode || captureMode || "selection")
     saveSettings({ captureMode: target })
-    return runScreenshot(["screenshot", target, captureContext("", "", outputOverride, freezePid)], includeDemo)
+    return runCapture(["screenshot", target, captureContext("", "", outputOverride, freezePid)], includeDemo)
   }
 
   function screenshotGeometry(geometry, screenName, outputOverride, captureModeOverride, freezePid, includeDemo) {
@@ -147,25 +147,23 @@ Item {
     if (selectedGeometry === "") return "missing-geometry"
 
     saveSettings({ captureMode: String(captureModeOverride || "selection") })
-    return runScreenshot(["screenshot", "selection",
+    return runCapture(["screenshot", "selection",
       captureContext(selectedGeometry, screenName, outputOverride, freezePid)], includeDemo)
   }
 
-  function recordGeometry(geometry, screenName) {
+  function recordGeometry(geometry, screenName, includeDemo) {
     var selectedGeometry = String(geometry || "").replace(/^\s+|\s+$/g, "")
     if (selectedGeometry === "") return "missing-geometry"
 
     saveSettings({ captureMode: "record-selection" })
-    hide()
-
-    return runDetached(["record", "selection", captureContext(selectedGeometry, screenName, "", "")])
+    return runCapture(["record", "selection",
+      captureContext(selectedGeometry, screenName, "", "")], includeDemo)
   }
 
-  function record(mode) {
+  function record(mode, includeDemo) {
     var target = String(mode || "selection")
     saveSettings({ captureMode: target === "screen" ? "record-screen" : "record-selection" })
-    hide()
-    return runDetached(["record", target, captureContext("", "", "", "")])
+    return runCapture(["record", target, captureContext("", "", "", "")], includeDemo)
   }
 
   function stopRecording() {
@@ -287,8 +285,8 @@ Item {
     id: demoScreenshotProc
 
     onExited: function() {
-      var args = root.pendingScreenshotArgs
-      root.pendingScreenshotArgs = null
+      var args = root.pendingCaptureArgs
+      root.pendingCaptureArgs = null
       root.hide()
       if (args && args.length > 0) root.runDetached(args)
     }

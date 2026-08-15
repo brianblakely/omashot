@@ -38,16 +38,28 @@ assert_contains 'event.key === Qt.Key_QuoteLeft && (event.modifiers & Qt.ShiftMo
   "Shift+backtick does not activate demo capture"
 assert_contains 'freezePidForScreenshot(), demoCaptureHeld' "$OVERLAY" \
   "screenshot requests do not carry the held demo-capture state"
+assert_contains 'service.recordGeometry(geometry, targetScreen, demoCaptureHeld)' "$OVERLAY" \
+  "region recording requests do not carry the held demo-capture state"
+assert_contains 'service.record("screen", demoCaptureHeld)' "$OVERLAY" \
+  "screen recording requests do not carry the held demo-capture state"
 assert_contains 'sequence: "Shift+Space"' "$OVERLAY" \
   "holding tilde prevents the Space capture shortcut"
 assert_contains 'demoScreenshotProc.command = ["bash", helperPath, "demo-screenshot"]' "$SERVICE" \
   "the service does not capture the visible overlay first"
+assert_contains 'function recordGeometry(geometry, screenName, includeDemo)' "$SERVICE" \
+  "region recordings do not accept the demo-capture request"
+
+record_geometry=$(sed -n '/^  function recordGeometry(geometry, screenName, includeDemo)/,/^  }/p' "$SERVICE")
+rg --fixed-strings --quiet -- 'runCapture(["record", "selection"' <<<"$record_geometry" ||
+  fail "region recordings do not run after the demo screenshot"
+rg --fixed-strings --quiet -- '], includeDemo)' <<<"$record_geometry" ||
+  fail "region recordings ignore the demo-capture request"
 
 demo_exit=$(sed -n '/id: demoScreenshotProc/,/^  }/p' "$SERVICE")
 hide_line=$(rg -n --fixed-strings 'root.hide()' <<<"$demo_exit" | cut -d: -f1)
 capture_line=$(rg -n --fixed-strings 'root.runDetached(args)' <<<"$demo_exit" | cut -d: -f1)
 [[ -n $hide_line && -n $capture_line && $hide_line -lt $capture_line ]] ||
-  fail "the normal screenshot is not sequenced after the overlay hides"
+  fail "the requested capture is not sequenced after the overlay hides"
 
 mkdir -p "$TEST_HOME/.config/omarchy" "$STUB_BIN" "$OUTPUT_DIR"
 

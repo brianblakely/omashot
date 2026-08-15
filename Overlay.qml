@@ -624,9 +624,9 @@ Item {
   function captureScreenTarget(screenName) {
     if (!service) return
     if (pickerMode) {
-      if (pickerAction === "record") service.record("screen")
+      if (pickerAction === "record") service.record("screen", demoCaptureHeld)
       else takeScreenshot("screen", pickerAction === "clipboard" ? "clipboard" : "file")
-    } else if (recordingMode) service.record("screen")
+    } else if (recordingMode) service.record("screen", demoCaptureHeld)
     else takeScreenshot("screen")
   }
 
@@ -654,11 +654,11 @@ Item {
       var targetScreen = screenName || selectionScreenName || ""
       if (pickerMode) {
         if (pickerAction === "record" && typeof service.recordGeometry === "function")
-          service.recordGeometry(geometry, targetScreen)
+          service.recordGeometry(geometry, targetScreen, demoCaptureHeld)
         else if (typeof service.screenshotGeometry === "function")
           takeGeometryScreenshot(geometry, targetScreen, pickerAction === "clipboard" ? "clipboard" : "file")
       } else if (recordingMode && typeof service.recordGeometry === "function") {
-        service.recordGeometry(geometry, targetScreen)
+        service.recordGeometry(geometry, targetScreen, demoCaptureHeld)
       } else if (typeof service.screenshotGeometry === "function") {
         takeGeometryScreenshot(geometry, targetScreen, "", targetKind === "window" ? "window" : "selection")
       }
