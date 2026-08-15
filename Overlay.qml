@@ -658,13 +658,14 @@ Item {
     Behavior on color { ColorAnimation { duration: 100 } }
 
     function positionPopup() {
-      if (!popup.parent) return
+      var boundary = iconDropdown.Window.window ? iconDropdown.Window.window.contentItem : iconDropdown
+      if (!boundary) return
 
       var gap = Style.spacing.xxs
-      var position = iconDropdown.mapToItem(popup.parent, 0, 0)
+      var position = iconDropdown.mapToItem(boundary, 0, 0)
       var popupHeight = popup.height > 0 ? popup.height : popup.implicitHeight
-      var availableWidth = popup.parent.width
-      var availableHeight = popup.parent.height
+      var availableWidth = boundary.width
+      var availableHeight = boundary.height
       var belowY = position.y + iconDropdown.height + gap
       var aboveY = position.y - popupHeight - gap
       var preferredX = position.x
@@ -675,8 +676,8 @@ Item {
       if (belowY + popupHeight > availableHeight)
         preferredY = aboveY
 
-      popup.x = Math.max(0, Math.min(availableWidth - popup.width, preferredX))
-      popup.y = Math.max(0, Math.min(availableHeight - popupHeight, preferredY))
+      popup.x = Math.max(0, Math.min(availableWidth - popup.width, preferredX)) - position.x
+      popup.y = Math.max(0, Math.min(availableHeight - popupHeight, preferredY)) - position.y
     }
 
     Row {
@@ -706,7 +707,7 @@ Item {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onClicked: popup.opened ? popup.close() : popup.open()
+      onClicked: popup.visible ? popup.close() : popup.open()
     }
 
     PanelToolTip {
@@ -718,17 +719,18 @@ Item {
 
     Popup {
       id: popup
-      parent: iconDropdown.Window.window ? iconDropdown.Window.window.contentItem : iconDropdown
+      parent: iconDropdown
       x: 0
       y: 0
       width: Math.min(iconDropdown.popupWidth,
-                      parent && parent.width > 0
-                        ? parent.width
+                      iconDropdown.Window.window && iconDropdown.Window.window.contentItem.width > 0
+                        ? iconDropdown.Window.window.contentItem.width
                         : iconDropdown.popupWidth)
       implicitHeight: Math.min(iconDropdown.options.length * Style.spacing.popupRowHeight + Math.max(0, iconDropdown.options.length - 1) * Style.spacing.labelGap + Style.spacing.xxs,
                                Style.spacing.popupRowHeight * 8 + 7 * Style.spacing.labelGap + Style.spacing.xxs)
       padding: Style.spacing.hairline
       focus: true
+      closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
       onAboutToShow: iconDropdown.positionPopup()
       background: Rectangle {
