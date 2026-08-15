@@ -1141,7 +1141,7 @@ Item {
         width: root.selectionW
         height: root.selectionH
         visible: root.showSelectionFrame
-        color: Util.alpha(Color.accent, 0.10)
+        color: "transparent"
         border.color: Color.accent
         border.width: root.regionBorderWidth
 
@@ -1275,16 +1275,30 @@ Item {
         anchors.topMargin: toolbar.contentTopInset
         spacing: Style.spacing.xs
 
-        ButtonGroup {
-          options: root.captureKinds
-          value: root.recordingMode ? "recording" : "screenshot"
-          foreground: Color.menu.text
-          background: Color.menu.background
-          accent: Color.accent
-          fontFamily: Style.font.menuFamily
-          fontSize: Style.font.bodySmall
-          focusable: false
-          onChanged: function(value) { root.setCaptureKind(value) }
+        Row {
+          id: captureKindButtons
+          height: Style.spacing.controlHeight
+          spacing: Style.spacing.md
+
+          Repeater {
+            model: root.captureKinds
+
+            Button {
+              required property var modelData
+              height: captureKindButtons.height
+              text: String(modelData.label || "")
+              iconText: String(modelData.icon || "")
+              selected: root.captureKind === String(modelData.value || "")
+              bordered: true
+              foreground: Color.menu.text
+              background: Color.menu.background
+              accent: Color.accent
+              fontFamily: Style.font.menuFamily
+              fontSize: Style.font.bodySmall
+              focusable: false
+              onClicked: root.setCaptureKind(modelData.value)
+            }
+          }
         }
 
         GroupGap {}

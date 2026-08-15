@@ -29,6 +29,9 @@ rg --fixed-strings --quiet -- 'value: "screenshot", label: "Screenshot"' <<<"$mo
   fail "the Screenshot mode is missing"
 rg --fixed-strings --quiet -- 'value: "recording", label: "Screen Recording"' <<<"$mode_options" ||
   fail "the Screen Recording mode is missing"
+assert_contains 'id: captureKindButtons' "the capture mode button row is missing"
+assert_contains 'height: captureKindButtons.height' \
+  "capture mode buttons do not match the other toolbar controls"
 
 assert_contains 'property string captureKind: "screenshot"' \
   "the overlay does not initialize in Screenshot mode"
@@ -58,6 +61,10 @@ assert_contains 'if (action === "region-draw-pending" || action === "region-move
   "clicking outside an existing region does not remain a region operation"
 assert_contains 'root.captureSelectedTarget(panel.currentScreenName)' \
   "Enter does not execute the selected capture target"
+
+region_box=$(sed -n '/id: selectionBox/,/MouseArea {/p' "$OVERLAY")
+rg --fixed-strings --quiet -- 'color: "transparent"' <<<"$region_box" ||
+  fail "the region box has a fill"
 
 whole_screen_function=$(sed -n '/^  function captureWholeScreen()/,/^  }/p' "$OVERLAY")
 rg --fixed-strings --quiet -- 'takeScreenshot("screen")' <<<"$whole_screen_function" ||
