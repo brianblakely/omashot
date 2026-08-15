@@ -48,7 +48,7 @@ Item {
 
   readonly property var captureKinds: [
     { value: "screenshot", label: "Screenshot", icon: "" },
-    { value: "recording", label: "Screen Recording", icon: screenRecordingIcon }
+    { value: "recording", label: "Recording", icon: screenRecordingIcon }
   ]
 
   readonly property bool recordingMode: captureKind === "recording"
@@ -1119,17 +1119,6 @@ Item {
       }
 
       Rectangle {
-        x: root.selectionX
-        y: root.selectionY
-        width: root.selectionW
-        height: root.selectionH
-        visible: root.hasSelection && root.targetKind === "window"
-        color: "transparent"
-        border.color: Color.accent
-        border.width: root.regionBorderWidth
-      }
-
-      Rectangle {
         id: selectionBox
         x: root.selectionX
         y: root.selectionY
@@ -1386,16 +1375,17 @@ Item {
           onClicked: root.toggleBoolean("webcam")
         }
 
-        GroupGap {}
+        GroupGap {
+          visible: root.recordingMode || root.recording
+        }
 
         MenuButton {
-          iconText: root.recording ? root.recordingStopIcon
-            : root.recordingMode ? root.recordingPlayIcon
-            : ""
+          id: recordingActionButton
+          visible: root.recordingMode || root.recording
+          iconText: root.recording ? root.recordingStopIcon : root.recordingPlayIcon
           tooltipText: !root.canRunSelected ? "Select a window, screen, or region"
             : root.recording ? "Stop recording"
-            : root.recordingMode ? "Record"
-            : "Capture"
+            : "Record"
           cta: true
           enabled: root.canRunSelected
           opacity: enabled ? 1 : 0.45

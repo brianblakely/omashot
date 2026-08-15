@@ -27,8 +27,8 @@ mode_count=$(rg --count '^\s*\{ value:' <<<"$mode_options")
 [[ $mode_count == 2 ]] || fail "the toolbar does not expose exactly two capture modes"
 rg --fixed-strings --quiet -- 'value: "screenshot", label: "Screenshot"' <<<"$mode_options" ||
   fail "the Screenshot mode is missing"
-rg --fixed-strings --quiet -- 'value: "recording", label: "Screen Recording"' <<<"$mode_options" ||
-  fail "the Screen Recording mode is missing"
+rg --fixed-strings --quiet -- 'value: "recording", label: "Recording"' <<<"$mode_options" ||
+  fail "the Recording mode is missing or has the wrong label"
 assert_contains 'id: captureKindButtons' "the capture mode button row is missing"
 assert_contains 'height: captureKindButtons.height' \
   "capture mode buttons do not match the other toolbar controls"
@@ -65,7 +65,16 @@ assert_contains 'root.captureSelectedTarget(panel.currentScreenName)' \
 region_box=$(sed -n '/id: selectionBox/,/MouseArea {/p' "$OVERLAY")
 rg --fixed-strings --quiet -- 'color: "transparent"' <<<"$region_box" ||
   fail "the region box has a fill"
+assert_absent 'visible: root.hasSelection && root.targetKind === "window"' \
+  "window targets still draw a border layer"
 assert_absent 'opacity: 0.72' "the Omarchy scrim color has an additional opacity multiplier"
+
+recording_action=$(sed -n '/id: recordingActionButton/,/^        }/p' "$OVERLAY")
+rg --fixed-strings --quiet -- 'visible: root.recordingMode || root.recording' <<<"$recording_action" ||
+  fail "the primary action is still visible during Screenshot mode"
+if rg --fixed-strings --quiet -- 'Capture' <<<"$recording_action"; then
+  fail "the Screenshot-mode Capture action is still present"
+fi
 
 whole_screen_function=$(sed -n '/^  function captureWholeScreen()/,/^  }/p' "$OVERLAY")
 rg --fixed-strings --quiet -- 'takeScreenshot("screen")' <<<"$whole_screen_function" ||
