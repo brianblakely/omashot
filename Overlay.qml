@@ -50,7 +50,7 @@ Item {
   property string windowTargetScreenName: ""
 
   readonly property string screenRecordingIcon: "󰻂" // Omarchy bar recording indicator
-  readonly property string regionRecordingIcon: "" // nf-cod-record
+  readonly property string regionRecordingIcon: "󰻃" // nf-md-record_circle_outline
   readonly property string recordingPlayIcon: "󰐊" // nf-md-play
   readonly property string recordingStopIcon: "󰓛" // nf-md-stop
 
