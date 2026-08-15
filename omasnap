@@ -22,7 +22,6 @@ OUTPUT_MODE="file-and-clipboard"
 SAVE_LOCATION="pictures"
 TIMER_SECONDS=0
 INCLUDE_CURSOR="false"
-SHOW_THUMBNAIL="true"
 REMEMBER_SELECTION="true"
 SETTLE_SECONDS="0.15"
 SCREENSHOT_EDITOR="${OMASNAP_EDITOR:-${OMARCHY_SCREENSHOT_EDITOR:-tensaku-edit}}"
@@ -74,10 +73,6 @@ while (($# > 0)); do
     ;;
   --cursor | --cursor=*)
     INCLUDE_CURSOR=$(take_value "$1" "${2:-}")
-    [[ $1 == *=* ]] && shift || shift 2
-    ;;
-  --thumbnail | --thumbnail=*)
-    SHOW_THUMBNAIL=$(take_value "$1" "${2:-}")
     [[ $1 == *=* ]] && shift || shift 2
     ;;
   --remember | --remember=*)
@@ -430,21 +425,10 @@ open_editor() {
 }
 
 notify_capture() {
-  local title="$1" body="$2" image="${3:-}"
-  truthy "$SHOW_THUMBNAIL" || return 0
+  local title="$1" body="$2"
 
-  if command -v omarchy-notification-send >/dev/null 2>&1 && [[ -n $image && -f $image ]]; then
-    (
-      if [[ -n $(omarchy-notification-send "$title" "$body" -t 10000 --image "$image" -a 2>/dev/null) ]]; then
-        open_editor "$image"
-      fi
-    ) >/dev/null 2>&1 &
-  elif command -v notify-send >/dev/null 2>&1; then
-    if [[ -n $image && -f $image ]]; then
-      notify-send "$title" "$body" -i "$image" -t 6000 >/dev/null 2>&1 || true
-    else
-      notify-send "$title" "$body" -t 3000 >/dev/null 2>&1 || true
-    fi
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "$title" "$body" -t 3000 >/dev/null 2>&1 || true
   fi
 }
 
@@ -490,24 +474,24 @@ screenshot() {
   clipboard)
     wl-copy --type image/png <"$filepath"
     write_state "" "$filepath" ""
-    notify_capture "Screenshot copied" "Image is on the clipboard." "$filepath"
+    notify_capture "Screenshot copied" "Image is on the clipboard."
     ;;
   file)
     printf '%s\n' "$filepath"
     write_state "" "$filepath" ""
-    notify_capture "Screenshot saved" "$filepath" "$filepath"
+    notify_capture "Screenshot saved" "$filepath"
     ;;
   editor)
     printf '%s\n' "$filepath"
     write_state "" "$filepath" ""
     open_editor "$filepath"
-    notify_capture "Screenshot opened" "$filepath" "$filepath"
+    notify_capture "Screenshot opened" "$filepath"
     ;;
   file-and-clipboard | *)
     wl-copy --type image/png <"$filepath"
     printf '%s\n' "$filepath"
     write_state "" "$filepath" ""
-    notify_capture "Screenshot saved to file and clipboard" "$filepath" "$filepath"
+    notify_capture "Screenshot saved to file and clipboard" "$filepath"
     ;;
   esac
 }
@@ -720,7 +704,6 @@ Options:
   --save-location=pictures|desktop|documents|downloads|/absolute/path
   --timer=0|5|10
   --cursor=true|false
-  --thumbnail=true|false
   --remember=true|false
   --geometry='x,y WIDTHxHEIGHT'
   --screen-name=MONITOR

@@ -128,7 +128,6 @@ Item {
   function toggleBoolean(name) {
     if (!service) return
     if (name === "cursor") service.setIncludeCursor(!service.includeCursor)
-    else if (name === "thumbnail") service.setShowThumbnail(!service.showThumbnail)
     else if (name === "remember") service.setRememberSelection(!service.rememberSelection)
     else if (name === "desktopAudio") service.setRecordDesktopAudio(!service.recordDesktopAudio)
     else if (name === "microphoneAudio") service.setRecordMicrophoneAudio(!service.recordMicrophoneAudio)
@@ -1275,13 +1274,6 @@ Item {
           tooltipText: "Pointer: " + (service && service.includeCursor ? "On" : "Off")
           checked: service && service.includeCursor
           onClicked: root.toggleBoolean("cursor")
-        }
-
-        MenuButton {
-          iconText: "󰋩"
-          tooltipText: "Thumbnail: " + (!service || service.showThumbnail ? "On" : "Off")
-          checked: !service || service.showThumbnail
-          onClicked: root.toggleBoolean("thumbnail")
         }
 
         MenuButton {
