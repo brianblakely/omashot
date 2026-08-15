@@ -65,6 +65,7 @@ assert_contains 'root.captureSelectedTarget(panel.currentScreenName)' \
 region_box=$(sed -n '/id: selectionBox/,/MouseArea {/p' "$OVERLAY")
 rg --fixed-strings --quiet -- 'color: "transparent"' <<<"$region_box" ||
   fail "the region box has a fill"
+assert_absent 'opacity: 0.72' "the Omarchy scrim color has an additional opacity multiplier"
 
 whole_screen_function=$(sed -n '/^  function captureWholeScreen()/,/^  }/p' "$OVERLAY")
 rg --fixed-strings --quiet -- 'takeScreenshot("screen")' <<<"$whole_screen_function" ||

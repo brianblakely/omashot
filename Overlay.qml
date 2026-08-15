@@ -1057,7 +1057,6 @@ Item {
       Rectangle {
         anchors.fill: parent
         color: Color.menu.scrim
-        opacity: 0.72
         visible: !root.hasSelection
       }
 
@@ -1067,7 +1066,6 @@ Item {
         width: parent.width
         height: root.hasSelection ? root.selectionY : parent.height
         color: Color.menu.scrim
-        opacity: 0.72
         visible: root.hasSelection
       }
 
@@ -1077,7 +1075,6 @@ Item {
         width: root.selectionX
         height: root.selectionH
         color: Color.menu.scrim
-        opacity: 0.72
         visible: root.hasSelection
       }
 
@@ -1087,7 +1084,6 @@ Item {
         width: Math.max(0, parent.width - x)
         height: root.selectionH
         color: Color.menu.scrim
-        opacity: 0.72
         visible: root.hasSelection
       }
 
@@ -1097,7 +1093,6 @@ Item {
         width: parent.width
         height: Math.max(0, parent.height - y)
         color: Color.menu.scrim
-        opacity: 0.72
         visible: root.hasSelection
       }
 
