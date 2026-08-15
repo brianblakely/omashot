@@ -51,8 +51,8 @@ Item {
 
   readonly property string screenRecordingIcon: "󰻂" // Omarchy bar recording indicator
   readonly property string regionRecordingIcon: "󰻃" // nf-md-record_circle_outline
-  readonly property string recordingPlayIcon: "󰐊" // nf-md-play
-  readonly property string recordingStopIcon: "󰓛" // nf-md-stop
+  readonly property string recordingPlayIcon: "" // nf-fa-circle_play
+  readonly property string recordingStopIcon: "" // nf-fa-circle_stop
 
   readonly property var captureModes: [
     { value: "screen", label: "Screen", icon: "󰍹" },
