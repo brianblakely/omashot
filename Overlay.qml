@@ -276,15 +276,22 @@ Item {
     var point = localToGlobal(x, y, screenName)
     var workspaceId = monitorWorkspaceId(screenName)
 
-    for (var i = pickerClients.length - 1; i >= 0; i--) {
-      var client = pickerClients[i]
-      if (!client || client.mapped === false || client.hidden === true || client.minimized === true) continue
-      if (client.workspace && isFinite(workspaceId) && Number(client.workspace.id) !== workspaceId) continue
+    for (var floatingPass = 0; floatingPass < 2; floatingPass++) {
+      var wantFloating = floatingPass === 0
 
-      var rect = clientRect(client)
-      if (!rect || rect.width <= 0 || rect.height <= 0) continue
-      if (point.x >= rect.x && point.x < rect.x + rect.width && point.y >= rect.y && point.y < rect.y + rect.height)
-        return client
+      for (var i = pickerClients.length - 1; i >= 0; i--) {
+        var client = pickerClients[i]
+        if (!client || client.mapped === false || client.hidden === true || client.minimized === true) continue
+        if (client.workspace && isFinite(workspaceId) && Number(client.workspace.id) !== workspaceId) continue
+
+        var isFloating = client.floating === true || Number(client.floating) === 1
+        if (isFloating !== wantFloating) continue
+
+        var rect = clientRect(client)
+        if (!rect || rect.width <= 0 || rect.height <= 0) continue
+        if (point.x >= rect.x && point.x < rect.x + rect.width && point.y >= rect.y && point.y < rect.y + rect.height)
+          return client
+      }
     }
 
     return null

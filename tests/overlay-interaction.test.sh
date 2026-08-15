@@ -50,6 +50,10 @@ rg --fixed-strings --quiet -- 'clearSelection()' <<<"$set_capture_kind_function"
 
 assert_contains 'function updateTargetHover(' "window hover targeting is missing"
 assert_contains 'var client = clientAt(' "hover targeting does not inspect the window under the pointer"
+assert_contains 'var wantFloating = floatingPass === 0' \
+  "window hit-testing does not check floating clients first"
+assert_contains 'if (isFloating !== wantFloating) continue' \
+  "window hit-testing does not separate floating and tiled clients"
 assert_contains 'if (isPointAtTopEdge(y))' "top-edge screen targeting is missing"
 assert_contains 'root.beginTargetPointer(' "pointer presses do not use unified target selection"
 assert_contains 'onReleased: root.finishTargetPointer(' "pointer clicks do not execute unified targets"
