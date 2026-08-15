@@ -31,21 +31,21 @@ mkdir -p "$STUB_BIN" "$TEST_HOME"
 
 cat >"$STUB_BIN/omarchy-capture-screenrecording" <<'STUB'
 #!/usr/bin/env bash
-printf '%s\n' "$OMARCHY_SCREENRECORD_DIR" >"$OMASNAP_TEST_DESTINATION_LOG"
+printf '%s\n' "$OMARCHY_SCREENRECORD_DIR" >"$OMASHOT_TEST_DESTINATION_LOG"
 STUB
 
 chmod +x "$STUB_BIN/omarchy-capture-screenrecording"
 
 run_recording() {
   env \
-    -u OMASNAP_RECORDING_DIR \
+    -u OMASHOT_RECORDING_DIR \
     -u OMARCHY_SCREENRECORD_DIR \
     PATH="$STUB_BIN:$PATH" \
     HOME="$TEST_HOME" \
     XDG_VIDEOS_DIR="$VIDEOS_DIR" \
     XDG_DESKTOP_DIR="$DESKTOP_DIR" \
-    OMASNAP_TEST_DESTINATION_LOG="$DESTINATION_LOG" \
-    "$PLUGIN_DIR/omasnap" record screen --settle=0 "$@"
+    OMASHOT_TEST_DESTINATION_LOG="$DESTINATION_LOG" \
+    "$PLUGIN_DIR/omashot" record screen --settle=0 "$@"
 }
 
 run_recording --save-location=pictures

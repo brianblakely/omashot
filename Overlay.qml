@@ -15,7 +15,7 @@ Item {
   property var service: null
   property bool opened: false
 
-  readonly property string pluginId: manifest && manifest.id ? String(manifest.id) : "b.omasnap"
+  readonly property string pluginId: manifest && manifest.id ? String(manifest.id) : "b.omashot"
   property string selectedMode: service ? service.captureMode : "selection"
   property bool hasSelection: false
   property int selectionX: 0
@@ -1081,7 +1081,7 @@ Item {
     visible: root.opened
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
-    WlrLayershell.namespace: "b-omasnap"
+    WlrLayershell.namespace: "b-omashot"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore

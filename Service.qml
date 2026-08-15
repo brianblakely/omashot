@@ -10,9 +10,9 @@ Item {
   property string omarchyPath: ""
   property var manifest: null
 
-  readonly property string pluginId: manifest && manifest.id ? String(manifest.id) : "b.omasnap"
+  readonly property string pluginId: manifest && manifest.id ? String(manifest.id) : "b.omashot"
   readonly property string sourceDir: manifest && manifest.__sourceDir ? String(manifest.__sourceDir) : ""
-  readonly property string helperPath: sourceDir ? sourceDir + "/omasnap" : Qt.resolvedUrl("omasnap").toString().replace(/^file:\/\//, "")
+  readonly property string helperPath: sourceDir ? sourceDir + "/omashot" : Qt.resolvedUrl("omashot").toString().replace(/^file:\/\//, "")
 
   readonly property var pluginSettings: currentSettings()
   readonly property string captureMode: setting("captureMode", "selection")
@@ -308,63 +308,63 @@ Item {
   GlobalShortcut {
     appid: root.pluginId
     name: "show"
-    description: "Show Omasnap"
+    description: "Show Omashot"
     onPressed: root.show()
   }
 
   GlobalShortcut {
     appid: root.pluginId
     name: "capture-screen"
-    description: "Omasnap capture screen"
+    description: "Omashot capture screen"
     onPressed: root.screenshot("screen")
   }
 
   GlobalShortcut {
     appid: root.pluginId
     name: "capture-selection"
-    description: "Omasnap capture region"
+    description: "Omashot capture region"
     onPressed: root.captureSelection()
   }
 
   GlobalShortcut {
     appid: root.pluginId
     name: "capture-window"
-    description: "Omasnap capture window"
+    description: "Omashot capture window"
     onPressed: root.screenshot("window")
   }
 
   GlobalShortcut {
     appid: root.pluginId
     name: "copy-screen"
-    description: "Omasnap copy screen"
+    description: "Omashot copy screen"
     onPressed: root.screenshot("screen", "clipboard")
   }
 
   GlobalShortcut {
     appid: root.pluginId
     name: "copy-selection"
-    description: "Omasnap copy region"
+    description: "Omashot copy region"
     onPressed: root.copySelection()
   }
 
   GlobalShortcut {
     appid: root.pluginId
     name: "record-screen"
-    description: "Omasnap record screen"
+    description: "Omashot record screen"
     onPressed: root.record("screen")
   }
 
   GlobalShortcut {
     appid: root.pluginId
     name: "record-selection"
-    description: "Omasnap record region"
+    description: "Omashot record region"
     onPressed: root.recordSelection()
   }
 
   GlobalShortcut {
     appid: root.pluginId
     name: "stop-recording"
-    description: "Omasnap stop recording"
+    description: "Omashot stop recording"
     onPressed: root.stopRecording()
   }
 

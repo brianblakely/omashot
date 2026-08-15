@@ -2,8 +2,8 @@
 
 set -o pipefail
 
-APP_NAME="Omasnap"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omasnap"
+APP_NAME="Omashot"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omashot"
 STATE_FILE="$STATE_DIR/state.json"
 TMP_DIR="${TMPDIR:-/tmp}"
 RECORDING_FILE="/tmp/omarchy-screenrecord-filename"
@@ -24,7 +24,7 @@ SAVE_LOCATION="pictures"
 TIMER_SECONDS=0
 INCLUDE_CURSOR="false"
 SETTLE_SECONDS="0.15"
-SCREENSHOT_EDITOR="${OMASNAP_EDITOR:-${OMARCHY_SCREENSHOT_EDITOR:-tensaku-edit}}"
+SCREENSHOT_EDITOR="${OMASHOT_EDITOR:-${OMARCHY_SCREENSHOT_EDITOR:-tensaku-edit}}"
 DESKTOP_AUDIO="false"
 MICROPHONE_AUDIO="false"
 WEBCAM="false"
@@ -138,17 +138,17 @@ directory_for_location() {
   desktop) printf '%s\n' "${XDG_DESKTOP_DIR:-$HOME/Desktop}" ;;
   documents) printf '%s\n' "${XDG_DOCUMENTS_DIR:-$HOME/Documents}" ;;
   downloads) printf '%s\n' "${XDG_DOWNLOAD_DIR:-$HOME/Downloads}" ;;
-  videos) printf '%s\n' "${OMASNAP_RECORDING_DIR:-${OMARCHY_SCREENRECORD_DIR:-${XDG_VIDEOS_DIR:-$HOME/Videos}}}" ;;
+  videos) printf '%s\n' "${OMASHOT_RECORDING_DIR:-${OMARCHY_SCREENRECORD_DIR:-${XDG_VIDEOS_DIR:-$HOME/Videos}}}" ;;
   /*) printf '%s\n' "$SAVE_LOCATION" ;;
-  *) printf '%s\n' "${OMASNAP_SCREENSHOT_DIR:-${OMARCHY_SCREENSHOT_DIR:-${XDG_PICTURES_DIR:-$HOME/Pictures}}}" ;;
+  *) printf '%s\n' "${OMASHOT_SCREENSHOT_DIR:-${OMARCHY_SCREENSHOT_DIR:-${XDG_PICTURES_DIR:-$HOME/Pictures}}}" ;;
   esac
 }
 
 recording_directory() {
   load_user_dirs
 
-  if [[ -n ${OMASNAP_RECORDING_DIR:-} ]]; then
-    printf '%s\n' "$OMASNAP_RECORDING_DIR"
+  if [[ -n ${OMASHOT_RECORDING_DIR:-} ]]; then
+    printf '%s\n' "$OMASHOT_RECORDING_DIR"
     return
   fi
   if [[ -n ${OMARCHY_SCREENRECORD_DIR:-} ]]; then
@@ -491,7 +491,7 @@ screenshot() {
   fi
 
   if [[ $mode == "clipboard" ]]; then
-    filepath=$(mktemp "$TMP_DIR/omasnap.XXXXXX.png")
+    filepath=$(mktemp "$TMP_DIR/omashot.XXXXXX.png")
   else
     output_dir=$(directory_for_location)
     mkdir -p "$output_dir"
@@ -545,7 +545,7 @@ install_recording_escape_binding() {
   mkdir -p "$STATE_DIR" 2>/dev/null || return 0
 
   local lua
-  lua='if omasnap_recording_escape_bind then omasnap_recording_escape_bind:unbind() end; omasnap_recording_escape_bind = hl.bind("ESCAPE", hl.dsp.exec_cmd("omarchy-shell b.omashot stopRecording"), { description = "Stop Omashot recording" })'
+  lua='if omashot_recording_escape_bind then omashot_recording_escape_bind:unbind() end; omashot_recording_escape_bind = hl.bind("ESCAPE", hl.dsp.exec_cmd("omarchy-shell b.omashot stopRecording"), { description = "Stop Omashot recording" })'
   if hyprctl eval "$lua" >/dev/null 2>&1; then
     : >"$RECORDING_ESCAPE_MARKER"
   fi
@@ -555,7 +555,7 @@ remove_recording_escape_binding() {
   [[ -e $RECORDING_ESCAPE_MARKER ]] || return 0
 
   if command -v hyprctl >/dev/null 2>&1; then
-    hyprctl eval 'if omasnap_recording_escape_bind then omasnap_recording_escape_bind:unbind(); omasnap_recording_escape_bind = nil end' \
+    hyprctl eval 'if omashot_recording_escape_bind then omashot_recording_escape_bind:unbind(); omashot_recording_escape_bind = nil end' \
       >/dev/null 2>&1 || return 0
   fi
   rm -f -- "$RECORDING_ESCAPE_MARKER"
@@ -701,7 +701,7 @@ stop_recording() {
   require_command omarchy-capture-screenrecording
   local filename status
   filename=$(cat "$RECORDING_FILE" 2>/dev/null)
-  STOP_OUTPUT_FILE=$(mktemp "$TMP_DIR/omasnap-stop.XXXXXX") ||
+  STOP_OUTPUT_FILE=$(mktemp "$TMP_DIR/omashot-stop.XXXXXX") ||
     fail "could not create temporary stop output"
 
   omarchy-capture-screenrecording --stop-recording >"$STOP_OUTPUT_FILE"
@@ -773,10 +773,10 @@ open-last)
 help | -h | --help | *)
   cat <<USAGE
 Usage:
-  omasnap screenshot [screen|display|region|window|active-window|last|smart] [options]
-  omasnap record [screen|region] [options]
-  omasnap stop-recording
-  omasnap status
+  omashot screenshot [screen|display|region|window|active-window|last|smart] [options]
+  omashot record [screen|region] [options]
+  omashot stop-recording
+  omashot status
 
 Options:
   --output-mode=file-and-clipboard|file|clipboard|editor

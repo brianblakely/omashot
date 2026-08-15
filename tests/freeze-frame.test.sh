@@ -46,17 +46,17 @@ mkdir -p "$STUB_BIN" "$OUTPUT_DIR"
 
 cat >"$STUB_BIN/grim" <<'STUB'
 #!/usr/bin/env bash
-freeze_pid="${OMASNAP_TEST_EXPECTED_FREEZE_PID:-}"
-if [[ -z $freeze_pid && -f ${OMASNAP_TEST_INTERNAL_FREEZE_PID_FILE:-} ]]; then
-  freeze_pid=$(<"$OMASNAP_TEST_INTERNAL_FREEZE_PID_FILE")
+freeze_pid="${OMASHOT_TEST_EXPECTED_FREEZE_PID:-}"
+if [[ -z $freeze_pid && -f ${OMASHOT_TEST_INTERNAL_FREEZE_PID_FILE:-} ]]; then
+  freeze_pid=$(<"$OMASHOT_TEST_INTERNAL_FREEZE_PID_FILE")
 fi
 
 [[ $freeze_pid =~ ^[1-9][0-9]*$ ]] || exit 90
 kill -0 "$freeze_pid" 2>/dev/null || exit 91
-printf 'alive\n' >>"$OMASNAP_TEST_GRIM_FREEZE_MARKER"
-printf '%s\n' "$*" >>"$OMASNAP_TEST_GRIM_LOG"
+printf 'alive\n' >>"$OMASHOT_TEST_GRIM_FREEZE_MARKER"
+printf '%s\n' "$*" >>"$OMASHOT_TEST_GRIM_LOG"
 
-if [[ ${OMASNAP_TEST_GRIM_FAIL:-false} == true ]]; then
+if [[ ${OMASHOT_TEST_GRIM_FAIL:-false} == true ]]; then
   exit 7
 fi
 
@@ -66,7 +66,7 @@ STUB
 
 cat >"$STUB_BIN/hyprpicker" <<'STUB'
 #!/usr/bin/env bash
-printf '%s\n' "$$" >"$OMASNAP_TEST_INTERNAL_FREEZE_PID_FILE"
+printf '%s\n' "$$" >"$OMASHOT_TEST_INTERNAL_FREEZE_PID_FILE"
 exec sleep 30
 STUB
 
@@ -91,18 +91,18 @@ run_screenshot() {
   env \
     PATH="$STUB_BIN:$PATH" \
     XDG_STATE_HOME="$STATE_ROOT" \
-    OMASNAP_TEST_GRIM_LOG="$GRIM_LOG" \
-    OMASNAP_TEST_GRIM_FREEZE_MARKER="$GRIM_FREEZE_MARKER" \
-    OMASNAP_TEST_INTERNAL_FREEZE_PID_FILE="$INTERNAL_FREEZE_PID_FILE" \
-    OMASNAP_TEST_EXPECTED_FREEZE_PID="${OMASNAP_TEST_EXPECTED_FREEZE_PID:-}" \
-    OMASNAP_TEST_GRIM_FAIL="${OMASNAP_TEST_GRIM_FAIL:-false}" \
-    "$PLUGIN_DIR/omasnap" "$@"
+    OMASHOT_TEST_GRIM_LOG="$GRIM_LOG" \
+    OMASHOT_TEST_GRIM_FREEZE_MARKER="$GRIM_FREEZE_MARKER" \
+    OMASHOT_TEST_INTERNAL_FREEZE_PID_FILE="$INTERNAL_FREEZE_PID_FILE" \
+    OMASHOT_TEST_EXPECTED_FREEZE_PID="${OMASHOT_TEST_EXPECTED_FREEZE_PID:-}" \
+    OMASHOT_TEST_GRIM_FAIL="${OMASHOT_TEST_GRIM_FAIL:-false}" \
+    "$PLUGIN_DIR/omashot" "$@"
 }
 
 sleep 30 &
 external_freeze_pid=$!
 RUNNING_PIDS+=("$external_freeze_pid")
-OMASNAP_TEST_EXPECTED_FREEZE_PID="$external_freeze_pid" \
+OMASHOT_TEST_EXPECTED_FREEZE_PID="$external_freeze_pid" \
   run_screenshot screenshot selection \
     --geometry="10,20 30x40" \
     --freeze-pid="$external_freeze_pid" \
@@ -115,7 +115,7 @@ assert_stopped "$external_freeze_pid" "external freeze survived a successful cap
 grep -Fq -- '-g 10,20 30x40' "$GRIM_LOG" || fail "grim received the wrong geometry"
 
 rm -f "$INTERNAL_FREEZE_PID_FILE"
-OMASNAP_TEST_EXPECTED_FREEZE_PID="" \
+OMASHOT_TEST_EXPECTED_FREEZE_PID="" \
   run_screenshot screenshot selection \
     --output-mode=file \
     --save-location="$OUTPUT_DIR" \
@@ -127,7 +127,7 @@ assert_stopped "$internal_freeze_pid" "picker freeze survived a successful captu
 sleep 30 &
 failed_freeze_pid=$!
 RUNNING_PIDS+=("$failed_freeze_pid")
-if OMASNAP_TEST_EXPECTED_FREEZE_PID="$failed_freeze_pid" OMASNAP_TEST_GRIM_FAIL=true \
+if OMASHOT_TEST_EXPECTED_FREEZE_PID="$failed_freeze_pid" OMASHOT_TEST_GRIM_FAIL=true \
   run_screenshot screenshot selection \
     --geometry="1,2 3x4" \
     --freeze-pid="$failed_freeze_pid" \
