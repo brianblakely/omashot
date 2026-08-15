@@ -145,7 +145,23 @@ directory_for_location() {
 
 recording_directory() {
   load_user_dirs
-  printf '%s\n' "${OMASNAP_RECORDING_DIR:-${OMARCHY_SCREENRECORD_DIR:-${XDG_VIDEOS_DIR:-$HOME/Videos}}}"
+
+  if [[ -n ${OMASNAP_RECORDING_DIR:-} ]]; then
+    printf '%s\n' "$OMASNAP_RECORDING_DIR"
+    return
+  fi
+  if [[ -n ${OMARCHY_SCREENRECORD_DIR:-} ]]; then
+    printf '%s\n' "$OMARCHY_SCREENRECORD_DIR"
+    return
+  fi
+
+  case "${SAVE_LOCATION,,}" in
+  desktop) printf '%s\n' "${XDG_DESKTOP_DIR:-$HOME/Desktop}" ;;
+  documents) printf '%s\n' "${XDG_DOCUMENTS_DIR:-$HOME/Documents}" ;;
+  downloads) printf '%s\n' "${XDG_DOWNLOAD_DIR:-$HOME/Downloads}" ;;
+  /*) printf '%s\n' "$SAVE_LOCATION" ;;
+  pictures | videos | *) printf '%s\n' "${XDG_VIDEOS_DIR:-$HOME/Videos}" ;;
+  esac
 }
 
 safe_timer_seconds() {

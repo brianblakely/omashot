@@ -938,8 +938,8 @@ Item {
         function selectCurrent() {
           if (currentIndex < 0 || currentIndex >= iconDropdown.options.length) return
           var next = iconDropdown.optionValue(iconDropdown.options[currentIndex])
-          iconDropdown.value = next
           iconDropdown.changed(next)
+          if (iconDropdown.value !== next) iconDropdown.value = next
           popup.close()
         }
 
@@ -1501,6 +1501,7 @@ Item {
         IconDropdown {
           label: "Save"
           iconText: "󰈙"
+          visible: !root.recordingMode
           width: toolbar.dropdownButtonWidth
           popupWidth: Style.space(170)
           value: service ? service.outputMode : "file-and-clipboard"
@@ -1518,14 +1519,23 @@ Item {
           iconText: "󰉋"
           width: toolbar.dropdownButtonWidth
           popupWidth: Style.space(150)
-          value: service ? service.saveLocation : "pictures"
-          options: [
+          value: service
+            ? (root.recordingMode && service.saveLocation === "pictures" ? "videos" : service.saveLocation)
+            : (root.recordingMode ? "videos" : "pictures")
+          options: root.recordingMode ? [
+            { value: "videos", label: "Videos" },
+            { value: "desktop", label: "Desktop" },
+            { value: "documents", label: "Documents" },
+            { value: "downloads", label: "Downloads" }
+          ] : [
             { value: "pictures", label: "Pictures" },
             { value: "desktop", label: "Desktop" },
             { value: "documents", label: "Documents" },
             { value: "downloads", label: "Downloads" }
           ]
-          onChanged: function(value) { if (service) service.setSaveLocation(value) }
+          onChanged: function(value) {
+            if (service) service.setSaveLocation(root.recordingMode && value === "videos" ? "pictures" : value)
+          }
         }
 
         IconDropdown {
