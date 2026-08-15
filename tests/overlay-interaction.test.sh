@@ -4,6 +4,7 @@ set -euo pipefail
 
 PLUGIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 OVERLAY="$PLUGIN_DIR/Overlay.qml"
+SERVICE="$PLUGIN_DIR/Service.qml"
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
@@ -89,5 +90,26 @@ if rg --fixed-strings --quiet -- 'captureScreenTarget(' <<<"$whole_screen_functi
   fail "Space follows Screen Recording mode instead of always taking a screenshot"
 fi
 assert_contains 'onActivated: root.captureWholeScreen()' "the Space shortcut is missing"
+
+assert_contains 'property bool recordingPresentation: false' \
+  "the overlay does not track the persistent recording scrim"
+assert_contains 'function onRecordingPresentationRequested()' \
+  "geometry recording does not activate the persistent scrim"
+rg --fixed-strings --quiet -- 'if (keepOverlay === true) recordingPresentationRequested()' "$SERVICE" ||
+  fail "the recording service does not request the persistent scrim"
+assert_contains 'if (freezeProc.running) freezeProc.running = false' \
+  "the frozen frame remains active when recording starts"
+assert_contains 'width: root.recordingPresentation ? 0 : panel.width' \
+  "the recording scrim still intercepts pointer input"
+assert_contains 'root.opened && !root.recordingPresentation' \
+  "the recording scrim still takes exclusive keyboard focus"
+assert_contains 'visible: root.showSelectionFrame && !root.recordingPresentation' \
+  "the selection border can appear inside the recorded region"
+assert_contains 'visible: !root.pickerMode && !root.recordingPresentation' \
+  "the toolbar remains visible during a recording"
+
+record_geometry=$(sed -n '/^  function recordGeometry(geometry, screenName, includeDemo)/,/^  }/p' "$SERVICE")
+rg --fixed-strings --quiet -- '], includeDemo, true)' <<<"$record_geometry" ||
+  fail "geometry recordings do not preserve the scrim"
 
 printf 'PASS: unified overlay capture interactions\n'

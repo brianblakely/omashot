@@ -27,6 +27,9 @@ Item {
   property bool recording: false
   property string lastStatus: "{}"
   property var pendingCaptureArgs: null
+  property bool pendingCaptureKeepsOverlay: false
+
+  signal recordingPresentationRequested()
 
   function clampInt(value, min, max) {
     var parsed = parseInt(value, 10)
@@ -84,16 +87,23 @@ Item {
     return "ok"
   }
 
-  function runCapture(args, includeDemo) {
+  function launchCapture(args, keepOverlay) {
+    if (keepOverlay === true) recordingPresentationRequested()
+    else hide()
+    return runDetached(args)
+  }
+
+  function runCapture(args, includeDemo, keepOverlay) {
+    if (!helperPath) return "missing-helper"
+
     if (includeDemo !== true) {
-      hide()
-      return runDetached(args)
+      return launchCapture(args, keepOverlay)
     }
 
-    if (!helperPath) return "missing-helper"
     if (demoScreenshotProc.running) return "busy"
 
     pendingCaptureArgs = args.slice(0)
+    pendingCaptureKeepsOverlay = keepOverlay === true
     demoScreenshotProc.command = ["bash", helperPath, "demo-screenshot"]
     demoScreenshotProc.running = true
     return "ok"
@@ -157,7 +167,7 @@ Item {
 
     saveSettings({ captureMode: "record-selection" })
     return runCapture(["record", "selection",
-      captureContext(selectedGeometry, screenName, "", "")], includeDemo)
+      captureContext(selectedGeometry, screenName, "", "")], includeDemo, true)
   }
 
   function record(mode, includeDemo) {
@@ -286,9 +296,10 @@ Item {
 
     onExited: function() {
       var args = root.pendingCaptureArgs
+      var keepOverlay = root.pendingCaptureKeepsOverlay
       root.pendingCaptureArgs = null
-      root.hide()
-      if (args && args.length > 0) root.runDetached(args)
+      root.pendingCaptureKeepsOverlay = false
+      if (args && args.length > 0) root.launchCapture(args, keepOverlay)
     }
   }
 

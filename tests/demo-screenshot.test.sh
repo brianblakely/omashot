@@ -52,14 +52,18 @@ assert_contains 'function recordGeometry(geometry, screenName, includeDemo)' "$S
 record_geometry=$(sed -n '/^  function recordGeometry(geometry, screenName, includeDemo)/,/^  }/p' "$SERVICE")
 rg --fixed-strings --quiet -- 'runCapture(["record", "selection"' <<<"$record_geometry" ||
   fail "region recordings do not run after the demo screenshot"
-rg --fixed-strings --quiet -- '], includeDemo)' <<<"$record_geometry" ||
+rg --fixed-strings --quiet -- '], includeDemo, true)' <<<"$record_geometry" ||
   fail "region recordings ignore the demo-capture request"
 
 demo_exit=$(sed -n '/id: demoScreenshotProc/,/^  }/p' "$SERVICE")
-hide_line=$(rg -n --fixed-strings 'root.hide()' <<<"$demo_exit" | cut -d: -f1)
-capture_line=$(rg -n --fixed-strings 'root.runDetached(args)' <<<"$demo_exit" | cut -d: -f1)
+rg --fixed-strings --quiet -- 'root.launchCapture(args, keepOverlay)' <<<"$demo_exit" ||
+  fail "the requested capture is not sequenced after the demo screenshot"
+
+launch_capture=$(sed -n '/^  function launchCapture(args, keepOverlay)/,/^  }/p' "$SERVICE")
+hide_line=$(rg -n --fixed-strings 'else hide()' <<<"$launch_capture" | cut -d: -f1)
+capture_line=$(rg -n --fixed-strings 'return runDetached(args)' <<<"$launch_capture" | cut -d: -f1)
 [[ -n $hide_line && -n $capture_line && $hide_line -lt $capture_line ]] ||
-  fail "the requested capture is not sequenced after the overlay hides"
+  fail "ordinary captures do not hide the overlay before continuing"
 
 mkdir -p "$TEST_HOME/.config/omarchy" "$STUB_BIN" "$OUTPUT_DIR"
 

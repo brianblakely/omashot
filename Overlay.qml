@@ -40,6 +40,8 @@ Item {
   property bool freezeOpenPending: false
   property bool freezeCapturePending: false
   property bool demoCaptureHeld: false
+  property bool recordingPresentation: false
+  property bool recordingPresentationConfirmed: false
   property var pickerClients: []
   property var pickerMonitors: []
 
@@ -55,7 +57,7 @@ Item {
   readonly property bool recordingMode: captureKind === "recording"
   readonly property bool recording: service && service.recording === true
   readonly property bool pickerMode: pickerAction !== ""
-  readonly property bool targetDiscoveryMode: !regionOnlyPicker
+  readonly property bool targetDiscoveryMode: !regionOnlyPicker && !recordingPresentation
   readonly property bool regionEditor: true
   readonly property bool hasCaptureTarget: targetKind === "screen"
     || ((targetKind === "window" || targetKind === "region") && hasSelection)
@@ -67,6 +69,8 @@ Item {
   readonly property real regionBorderWidth: Math.max(1, Style.normalBorderWidth)
 
   function open(payloadJson) {
+    if (recordingPresentation) return
+
     var payload = ({})
     try { payload = JSON.parse(payloadJson || "{}") || ({}) } catch (e) { payload = ({}) }
 
@@ -96,6 +100,7 @@ Item {
     freezeOpenPending = false
     freezeCapturePending = false
     freezeOpenTimer.stop()
+    recordingStartTimeout.stop()
     if (preserveFreeze) freezeCaptureCleanupTimer.restart()
     else {
       freezeCaptureCleanupTimer.stop()
@@ -106,6 +111,8 @@ Item {
     regionLocked = false
     regionOnlyPicker = false
     demoCaptureHeld = false
+    recordingPresentation = false
+    recordingPresentationConfirmed = false
     finishPointer()
   }
 
@@ -216,6 +223,21 @@ Item {
     if (freezeProc.running) freezeProc.running = false
     freezeProc.running = true
     freezeOpenTimer.restart()
+  }
+
+  function beginRecordingPresentation() {
+    if (!opened || !hasSelection) return
+
+    recordingPresentation = true
+    recordingPresentationConfirmed = recording
+    finishPointer()
+    freezeOpenPending = false
+    freezeOpenTimer.stop()
+    freezeCaptureCleanupTimer.stop()
+    if (freezeProc.running) freezeProc.running = false
+
+    if (recordingPresentationConfirmed) recordingStartTimeout.stop()
+    else recordingStartTimeout.restart()
   }
 
   function refreshPickerTargets() {
@@ -1018,6 +1040,34 @@ Item {
   }
 
   Timer {
+    id: recordingStartTimeout
+    interval: (Math.max(0, service ? Number(service.timerSeconds) || 0 : 0) + 5) * 1000
+    repeat: false
+    onTriggered: {
+      if (root.recordingPresentation && !root.recording) root.dismiss()
+    }
+  }
+
+  Connections {
+    target: root.service
+
+    function onRecordingPresentationRequested() {
+      root.beginRecordingPresentation()
+    }
+
+    function onRecordingChanged() {
+      if (!root.recordingPresentation) return
+      var active = root.service && root.service.recording === true
+      if (active) {
+        root.recordingPresentationConfirmed = true
+        recordingStartTimeout.stop()
+      } else if (root.recordingPresentationConfirmed) {
+        root.dismiss()
+      }
+    }
+  }
+
+  Timer {
     interval: 700
     running: root.opened && root.targetDiscoveryMode
     repeat: true
@@ -1032,8 +1082,13 @@ Item {
     color: "transparent"
     WlrLayershell.namespace: "b-omashot"
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: root.opened && !root.recordingPresentation
+      ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
+    mask: Region {
+      width: root.recordingPresentation ? 0 : panel.width
+      height: root.recordingPresentation ? 0 : panel.height
+    }
 
     readonly property string currentScreenName: root.panelScreenName(panel)
 
@@ -1162,7 +1217,7 @@ Item {
         y: root.selectionY
         width: root.selectionW
         height: root.selectionH
-        visible: root.showSelectionFrame
+        visible: root.showSelectionFrame && !root.recordingPresentation
         color: "transparent"
         border.color: Color.accent
         border.width: root.regionBorderWidth
@@ -1274,7 +1329,7 @@ Item {
 
     BorderSurface {
       id: toolbar
-      visible: !root.pickerMode
+      visible: !root.pickerMode && !root.recordingPresentation
       readonly property int dropdownButtonWidth: Style.spacing.controlHeight + Style.spacing.controlPaddingX
       readonly property real edgeMargin: Math.max(Style.gapsOut, Style.space(14))
       readonly property real normalX: (panel.width - toolbar.width) / 2
