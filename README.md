@@ -24,17 +24,26 @@ omarchy plugin add https://github.com/brianblakely/omashot.git
 ```lua
 hl.unbind("PRINT")
 o.bind("PRINT", "Omashot", "omarchy-shell b.omashot show")
-o.bind("SUPER + SHIFT + F3", "Omashot capture screen", "omarchy-shell b.omashot captureScreen")
-o.bind("SUPER + SHIFT + CTRL + F3", "Omashot capture window", "omarchy-shell b.omashot captureWindow")
-o.bind("SUPER + SHIFT + F4", "Omashot capture to file", "omarchy-shell b.omashot captureToFile")
-o.bind("SUPER + SHIFT + CTRL + F4", "Omashot capture to clipboard", "omarchy-shell b.omashot captureToClipboard")
-o.bind("SUPER + SHIFT + F5", "Omashot", "omarchy-shell b.omashot show")
-o.bind("SUPER + SHIFT + F6", "Omashot record", "omarchy-shell b.omashot record")
-o.bind("SUPER + SHIFT + CTRL + F6", "Omashot stop recording", "omarchy-shell b.omashot stopRecording")
 ```
+
+## All Commands
+
+* omarchy-shell b.omashot show
+* omarchy-shell b.omashot captureScreen
+* omarchy-shell b.omashot captureWindow
+* omarchy-shell b.omashot captureToFile
+* omarchy-shell b.omashot captureToClipboard
+* omarchy-shell b.omashot record
+* omarchy-shell b.omashot stopRecording
 
 ## Update
 
 ```bash
 omarchy plugin update b.omashot
+```
+
+## Uninstall
+
+```bash
+omarchy plugin remove b.omashot
 ```
