@@ -32,6 +32,8 @@ rg --fixed-strings --quiet -- 'value: "recording", label: "Recording"' <<<"$mode
 assert_contains 'id: captureKindButtons' "the capture mode button row is missing"
 assert_contains 'height: captureKindButtons.height' \
   "capture mode buttons do not match the other toolbar controls"
+assert_contains 'labelText: String(modelData.label || "")' \
+  "capture modes are not using the toolbar button treatment"
 
 assert_contains 'property string captureKind: "screenshot"' \
   "the overlay does not initialize in Screenshot mode"

@@ -654,6 +654,7 @@ Item {
     id: menuButton
 
     property string iconText: ""
+    property string labelText: ""
     property string tooltipText: ""
     property bool checked: false
     property bool cta: false
@@ -667,9 +668,11 @@ Item {
       ? Color.menu.selectedBorder
       : Style.selectedBorderFor(idleText, activeText)
 
-    width: Style.spacing.controlHeight
+    width: implicitWidth
     height: Style.spacing.controlHeight
-    implicitWidth: Style.spacing.controlHeight
+    implicitWidth: labelText === ""
+      ? Style.spacing.controlHeight
+      : buttonContent.implicitWidth + Style.spacing.controlPaddingX * 2
     implicitHeight: Style.spacing.controlHeight
     radius: Style.cornerRadius
     color: cta && buttonMouse.pressed ? Util.alpha(ctaColor, 0.36)
@@ -689,12 +692,28 @@ Item {
 
     Behavior on color { ColorAnimation { duration: 100 } }
 
-    Text {
+    Row {
+      id: buttonContent
       anchors.centerIn: parent
-      text: menuButton.iconText
-      color: menuButton.cta ? menuButton.idleText : (menuButton.checked ? menuButton.activeText : menuButton.idleText)
-      font.family: Style.font.menuFamily
-      font.pixelSize: Style.font.icon
+      spacing: Style.spacing.controlGap
+
+      Text {
+        visible: menuButton.iconText !== ""
+        anchors.verticalCenter: parent.verticalCenter
+        text: menuButton.iconText
+        color: menuButton.cta ? menuButton.idleText : (menuButton.checked ? menuButton.activeText : menuButton.idleText)
+        font.family: Style.font.menuFamily
+        font.pixelSize: Style.font.icon
+      }
+
+      Text {
+        visible: menuButton.labelText !== ""
+        anchors.verticalCenter: parent.verticalCenter
+        text: menuButton.labelText
+        color: menuButton.checked ? menuButton.activeText : menuButton.idleText
+        font.family: Style.font.menuFamily
+        font.pixelSize: Style.font.bodySmall
+      }
     }
 
     MouseArea {
@@ -1267,19 +1286,12 @@ Item {
           Repeater {
             model: root.captureKinds
 
-            Button {
+            MenuButton {
               required property var modelData
               height: captureKindButtons.height
-              text: String(modelData.label || "")
+              labelText: String(modelData.label || "")
               iconText: String(modelData.icon || "")
-              selected: root.captureKind === String(modelData.value || "")
-              bordered: true
-              foreground: Color.menu.text
-              background: Color.menu.background
-              accent: Color.accent
-              fontFamily: Style.font.menuFamily
-              fontSize: Style.font.bodySmall
-              focusable: false
+              checked: root.captureKind === String(modelData.value || "")
               onClicked: root.setCaptureKind(modelData.value)
             }
           }
