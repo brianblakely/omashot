@@ -596,6 +596,17 @@ Item {
     else service.screenshot("screen", pickerAction === "clipboard" ? "clipboard" : "file")
   }
 
+  function captureWholeScreen() {
+    if (!service) return
+
+    if (pickerMode && pickerAction !== "record") {
+      service.screenshot("screen", pickerAction === "clipboard" ? "clipboard" : "file")
+      return
+    }
+
+    service.screenshot("screen")
+  }
+
   function captureCurrentTarget(screenName) {
     if (!service || !pickerMode) return
 
@@ -1103,6 +1114,15 @@ Item {
 
       onReleased: function(mouse) {
         if (!dragging) {
+          if (root.windowMode) {
+            root.updateWindowPreview(mouse.x, mouse.y, width, height, panel.currentScreenName)
+            if (root.hasWindowTarget) {
+              root.runSelected(panel.currentScreenName)
+              mouse.accepted = true
+              return
+            }
+          }
+
           root.dismiss()
           return
         }
@@ -1320,9 +1340,6 @@ Item {
         if (event.key === Qt.Key_Escape) {
           root.dismiss()
           event.accepted = true
-        } else if (root.pickerMode && event.key === Qt.Key_Space) {
-          root.captureScreenTarget(panel.currentScreenName)
-          event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
           if (root.pickerMode) root.captureFocusedWindowOrRegion(panel.currentScreenName, panel.width, panel.height)
           else {
@@ -1337,6 +1354,13 @@ Item {
           event.accepted = true
         }
       }
+    }
+
+    Shortcut {
+      sequence: "Space"
+      context: Qt.WindowShortcut
+      autoRepeat: false
+      onActivated: root.captureWholeScreen()
     }
 
     BorderSurface {
