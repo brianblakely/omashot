@@ -32,6 +32,7 @@ Item {
   property int pointerSelectionH: 1
   property int pointerAnchorX: 0
   property int pointerAnchorY: 0
+  property bool pointerHadSelection: false
   property string pickerAction: ""
   property string targetKind: ""
   property bool regionLocked: false
@@ -64,6 +65,7 @@ Item {
   readonly property bool regionEditor: selectedMode === "selection" || selectedMode === "record-selection" || pickerMode
   readonly property bool showSelectionFrame: hasSelection && (!pickerMode || targetKind === "region")
   readonly property int minimumSelectionSize: 1
+  readonly property real pointerDragThreshold: Style.space(4)
   readonly property real regionBorderWidth: Math.max(1, Style.normalBorderWidth)
 
   function open(payloadJson) {
@@ -419,6 +421,7 @@ Item {
 
   function beginPointer(action, x, y, maxWidth, maxHeight, screenName) {
     selectionScreenName = String(screenName || "")
+    pointerHadSelection = hasSelection
     pointerAction = String(action || "")
     pointerStartX = clamp(x, 0, maxWidth)
     pointerStartY = clamp(y, 0, maxHeight)
@@ -431,8 +434,13 @@ Item {
 
     if (pointerAction === "draw")
       setSelection(pointerStartX, pointerStartY, minimumSelectionSize, minimumSelectionSize, maxWidth, maxHeight)
-    else
+    else if (pointerAction !== "region-draw-pending" && pointerAction !== "region-move-pending")
       ensureSelection(maxWidth, maxHeight, screenName)
+  }
+
+  function beginRegionPointer(action, x, y, maxWidth, maxHeight, screenName) {
+    var pendingAction = String(action || "draw") === "move" ? "region-move-pending" : "region-draw-pending"
+    beginPointer(pendingAction, x, y, maxWidth, maxHeight, screenName)
   }
 
   function beginPickerPointer(x, y, maxWidth, maxHeight, screenName) {
@@ -476,6 +484,17 @@ Item {
     var dx = px - pointerStartX
     var dy = py - pointerStartY
 
+    if (pointerAction === "region-draw-pending" || pointerAction === "region-move-pending") {
+      if (Math.abs(dx) + Math.abs(dy) < pointerDragThreshold) return
+
+      if (pointerAction === "region-draw-pending") {
+        pointerAction = "draw"
+        setSelection(pointerStartX, pointerStartY, minimumSelectionSize, minimumSelectionSize, maxWidth, maxHeight)
+      } else {
+        pointerAction = "move"
+      }
+    }
+
     if (pointerAction === "pending") {
       if (dx === 0 && dy === 0) return
       pointerAction = "draw"
@@ -510,6 +529,20 @@ Item {
 
   function finishPointer() {
     pointerAction = ""
+    pointerHadSelection = false
+  }
+
+  function finishRegionPointer(maxWidth, maxHeight) {
+    var action = pointerAction
+    var placeExisting = pointerHadSelection
+      && (action === "region-draw-pending" || action === "region-move-pending")
+    var x = pointerStartX
+    var y = pointerStartY
+    var width = pointerSelectionW
+    var height = pointerSelectionH
+
+    finishPointer()
+    if (placeExisting) setSelection(x, y, width, height, maxWidth, maxHeight)
   }
 
   function finishPickerPointer(maxWidth, maxHeight, screenName) {
@@ -1243,7 +1276,7 @@ Item {
         onPressed: function(mouse) {
           keyCatcher.forceActiveFocus()
           if (root.pickerMode) root.beginPickerPointer(mouse.x, mouse.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
-          else root.beginPointer("draw", mouse.x, mouse.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
+          else root.beginRegionPointer("draw", mouse.x, mouse.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
           mouse.accepted = true
         }
         onPositionChanged: function(mouse) {
@@ -1252,7 +1285,7 @@ Item {
         }
         onReleased: {
           if (root.pickerMode) root.finishPickerPointer(selectionLayer.width, selectionLayer.height, panel.currentScreenName)
-          else root.finishPointer()
+          else root.finishRegionPointer(selectionLayer.width, selectionLayer.height)
         }
       }
 
@@ -1278,14 +1311,20 @@ Item {
             keyCatcher.forceActiveFocus()
             if (root.pickerMode) root.targetKind = "region"
             if (root.pickerMode) root.regionLocked = true
-            root.beginPointer("move", point.x, point.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
+            if (root.pickerMode)
+              root.beginPointer("move", point.x, point.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
+            else
+              root.beginRegionPointer("move", point.x, point.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
             mouse.accepted = true
           }
           onPositionChanged: function(mouse) {
             var point = mapToItem(selectionLayer, mouse.x, mouse.y)
             root.updatePointer(point.x, point.y, selectionLayer.width, selectionLayer.height)
           }
-          onReleased: root.finishPointer()
+          onReleased: {
+            if (root.pickerMode) root.finishPointer()
+            else root.finishRegionPointer(selectionLayer.width, selectionLayer.height)
+          }
         }
 
         ResizeHandle {
