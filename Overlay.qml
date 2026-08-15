@@ -131,6 +131,11 @@ Item {
 
   function setCaptureKind(kind) {
     var nextKind = String(kind || "screenshot") === "recording" ? "recording" : "screenshot"
+    if (captureKind === nextKind) {
+      clearSelection()
+      return
+    }
+
     captureKind = nextKind
     if (service && typeof service.setCaptureMode === "function")
       service.setCaptureMode(nextKind === "recording" ? "record-screen" : "screen")
@@ -307,12 +312,9 @@ Item {
     if (!targetDiscoveryMode || pointerAction !== "") return
     if (regionOnlyPicker) return
 
-    if (regionLocked) {
-      var insideRegion = targetKind === "region" && hasSelection
-        && x >= selectionX && x <= selectionX + selectionW
-        && y >= selectionY && y <= selectionY + selectionH
-      if (insideRegion) return
-      regionLocked = false
+    if (targetKind === "region" && hasSelection) {
+      regionLocked = true
+      return
     }
 
     if (isPointAtTopEdge(y)) {
@@ -414,7 +416,9 @@ Item {
   function beginTargetPointer(x, y, maxWidth, maxHeight, screenName) {
     selectionScreenName = String(screenName || "")
 
-    if (regionOnlyPicker) {
+    if (regionOnlyPicker || (targetKind === "region" && hasSelection)) {
+      targetKind = "region"
+      regionLocked = true
       beginRegionPointer("draw", x, y, maxWidth, maxHeight, screenName)
       return
     }
@@ -513,6 +517,16 @@ Item {
 
   function finishTargetPointer(maxWidth, maxHeight, screenName) {
     var action = pointerAction
+
+    if (action === "region-draw-pending" || action === "region-move-pending") {
+      finishRegionPointer(maxWidth, maxHeight)
+      if (hasSelection) {
+        targetKind = "region"
+        regionLocked = true
+      }
+      return
+    }
+
     finishPointer()
 
     if (action === "draw") {

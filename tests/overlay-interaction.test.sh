@@ -37,6 +37,12 @@ assert_contains 'captureKind = "screenshot"' \
 assert_absent 'captureModes' "the legacy five-button mode model is still present"
 assert_absent 'selectedMode' "capture type is still coupled to legacy target modes"
 
+set_capture_kind_function=$(sed -n '/^  function setCaptureKind(kind)/,/^  }/p' "$OVERLAY")
+rg --fixed-strings --quiet -- 'if (captureKind === nextKind) {' <<<"$set_capture_kind_function" ||
+  fail "clicking the selected capture mode does not enter default mouse selection"
+rg --fixed-strings --quiet -- 'clearSelection()' <<<"$set_capture_kind_function" ||
+  fail "clicking the selected capture mode does not erase the active target"
+
 assert_contains 'function updateTargetHover(' "window hover targeting is missing"
 assert_contains 'var client = clientAt(' "hover targeting does not inspect the window under the pointer"
 assert_contains 'if (isPointAtTopEdge(y))' "top-edge screen targeting is missing"
@@ -44,6 +50,12 @@ assert_contains 'root.beginTargetPointer(' "pointer presses do not use unified t
 assert_contains 'onReleased: root.finishTargetPointer(' "pointer clicks do not execute unified targets"
 assert_contains 'pointerAction = "draw"' "pointer drags cannot create a region"
 assert_contains 'targetKind = "region"' "dragged selections are not marked as regions"
+assert_contains 'if (targetKind === "region" && hasSelection) {' \
+  "hovering outside a region can still replace it with a screen or window target"
+assert_contains 'if (regionOnlyPicker || (targetKind === "region" && hasSelection)) {' \
+  "an existing region does not disable screen and window pointer targeting"
+assert_contains 'if (action === "region-draw-pending" || action === "region-move-pending") {' \
+  "clicking outside an existing region does not remain a region operation"
 assert_contains 'root.captureSelectedTarget(panel.currentScreenName)' \
   "Enter does not execute the selected capture target"
 
