@@ -135,11 +135,11 @@ Item {
     return runDetached(["screenshot", String(mode || captureMode || "selection")].concat(commonArgs(outputOverride || "")))
   }
 
-  function screenshotGeometry(geometry, screenName, outputOverride) {
+  function screenshotGeometry(geometry, screenName, outputOverride, captureModeOverride) {
     var selectedGeometry = String(geometry || "").replace(/^\s+|\s+$/g, "")
     if (selectedGeometry === "") return "missing-geometry"
 
-    saveSettings({ captureMode: "selection" })
+    saveSettings({ captureMode: String(captureModeOverride || "selection") })
     hide()
 
     var args = ["screenshot", "selection", "--geometry=" + selectedGeometry]
