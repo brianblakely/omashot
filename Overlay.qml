@@ -65,6 +65,7 @@ Item {
   readonly property bool recordingMode: selectedMode === "record-screen" || selectedMode === "record-selection"
   readonly property bool recording: service && service.recording === true
   readonly property bool pickerMode: pickerAction !== ""
+  readonly property bool fullScreenMode: !pickerMode && (selectedMode === "screen" || selectedMode === "record-screen")
   readonly property bool windowMode: selectedMode === "window" && !pickerMode
   readonly property bool targetDiscoveryMode: pickerMode || windowMode
   readonly property bool windowTargetVisible: windowMode && hasWindowTarget
@@ -1114,7 +1115,7 @@ Item {
       anchors.fill: parent
       color: Color.menu.scrim
       opacity: 0.72
-      visible: !root.regionEditor && root.selectedMode !== "screen" && !root.windowTargetVisible
+      visible: !root.regionEditor && !root.fullScreenMode && !root.windowTargetVisible
     }
 
     Item {
