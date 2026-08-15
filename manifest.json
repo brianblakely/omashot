@@ -4,7 +4,7 @@
   "name": "Omashot",
   "version": "0.0.50",
   "author": "Brian Blakely",
-  "description": "Screenshot and screen recording overlay for Omarchy",
+  "description": "Screenshot and screen-recording overlay for Omarchy",
   "kinds": [
     "service",
     "overlay"
