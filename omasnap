@@ -22,7 +22,6 @@ OUTPUT_MODE="file-and-clipboard"
 SAVE_LOCATION="pictures"
 TIMER_SECONDS=0
 INCLUDE_CURSOR="false"
-REMEMBER_SELECTION="true"
 SETTLE_SECONDS="0.15"
 SCREENSHOT_EDITOR="${OMASNAP_EDITOR:-${OMARCHY_SCREENSHOT_EDITOR:-tensaku-edit}}"
 DESKTOP_AUDIO="false"
@@ -73,10 +72,6 @@ while (($# > 0)); do
     ;;
   --cursor | --cursor=*)
     INCLUDE_CURSOR=$(take_value "$1" "${2:-}")
-    [[ $1 == *=* ]] && shift || shift 2
-    ;;
-  --remember | --remember=*)
-    REMEMBER_SELECTION=$(take_value "$1" "${2:-}")
     [[ $1 == *=* ]] && shift || shift 2
     ;;
   --settle | --settle=*)
@@ -449,7 +444,7 @@ screenshot() {
     exit 0
   fi
 
-  if truthy "$REMEMBER_SELECTION" && [[ -n $selection ]]; then
+  if [[ -n $selection ]]; then
     write_state "$selection" "" ""
   fi
 
@@ -704,7 +699,6 @@ Options:
   --save-location=pictures|desktop|documents|downloads|/absolute/path
   --timer=0|5|10
   --cursor=true|false
-  --remember=true|false
   --geometry='x,y WIDTHxHEIGHT'
   --screen-name=MONITOR
   --desktop-audio

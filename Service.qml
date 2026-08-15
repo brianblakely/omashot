@@ -20,7 +20,6 @@ Item {
   readonly property string saveLocation: setting("saveLocation", "pictures")
   readonly property int timerSeconds: clampInt(setting("timerSeconds", 0), 0, 60)
   readonly property bool includeCursor: setting("includeCursor", false) === true
-  readonly property bool rememberSelection: setting("rememberSelection", true) !== false
   readonly property bool recordDesktopAudio: setting("recordDesktopAudio", false) === true
   readonly property bool recordMicrophoneAudio: setting("recordMicrophoneAudio", false) === true
   readonly property bool recordWebcam: setting("recordWebcam", false) === true
@@ -75,7 +74,6 @@ Item {
       "--save-location=" + String(saveLocation || "pictures"),
       "--timer=" + String(timerSeconds),
       boolArg("cursor", includeCursor),
-      boolArg("remember", rememberSelection),
       "--editor=" + String(editorCommand || "tensaku-edit")
     ]
   }
@@ -214,7 +212,6 @@ Item {
       saveLocation: saveLocation,
       timerSeconds: timerSeconds,
       includeCursor: includeCursor,
-      rememberSelection: rememberSelection,
       recordDesktopAudio: recordDesktopAudio,
       recordMicrophoneAudio: recordMicrophoneAudio,
       recordWebcam: recordWebcam,
@@ -256,12 +253,6 @@ Item {
   function setIncludeCursor(value) {
     var next = value === true || String(value).toLowerCase() === "true"
     saveSettings({ includeCursor: next })
-    return next ? "true" : "false"
-  }
-
-  function setRememberSelection(value) {
-    var next = value === true || String(value).toLowerCase() === "true"
-    saveSettings({ rememberSelection: next })
     return next ? "true" : "false"
   }
 
@@ -406,7 +397,6 @@ Item {
     function saveLocation(value: string): string { return root.setSaveLocation(value) }
     function timer(value: string): string { return root.setTimer(value) }
     function cursor(value: string): string { return root.setIncludeCursor(value) }
-    function remember(value: string): string { return root.setRememberSelection(value) }
     function desktopAudio(value: string): string { return root.setRecordDesktopAudio(value) }
     function microphoneAudio(value: string): string { return root.setRecordMicrophoneAudio(value) }
     function webcam(value: string): string { return root.setRecordWebcam(value) }

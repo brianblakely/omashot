@@ -74,7 +74,6 @@ Item {
     }
 
     if (service && typeof service.refreshStatus === "function") service.refreshStatus()
-    if (regionEditor && service && service.rememberSelection !== true) hasSelection = false
     freezeAndShowOverlay()
   }
 
@@ -119,7 +118,6 @@ Item {
   function toggleBoolean(name) {
     if (!service) return
     if (name === "cursor") service.setIncludeCursor(!service.includeCursor)
-    else if (name === "remember") service.setRememberSelection(!service.rememberSelection)
     else if (name === "desktopAudio") service.setRecordDesktopAudio(!service.recordDesktopAudio)
     else if (name === "microphoneAudio") service.setRecordMicrophoneAudio(!service.recordMicrophoneAudio)
     else if (name === "webcam") service.setRecordWebcam(!service.recordWebcam)
@@ -1236,13 +1234,6 @@ Item {
           tooltipText: "Pointer: " + (service && service.includeCursor ? "On" : "Off")
           checked: service && service.includeCursor
           onClicked: root.toggleBoolean("cursor")
-        }
-
-        MenuButton {
-          iconText: "󰆓"
-          tooltipText: "Remember selection: " + (!service || service.rememberSelection ? "On" : "Off")
-          checked: !service || service.rememberSelection
-          onClicked: root.toggleBoolean("remember")
         }
 
         MenuButton {
