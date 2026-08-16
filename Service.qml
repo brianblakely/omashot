@@ -17,7 +17,7 @@ Item {
   readonly property var pluginSettings: currentSettings()
   readonly property string captureMode: setting("captureMode", "selection")
   readonly property string outputMode: setting("outputMode", "file-and-clipboard")
-  readonly property string saveLocation: setting("saveLocation", "pictures")
+  readonly property string saveLocation: normalizeSaveLocation(setting("saveLocation", "pictures"))
   readonly property int timerSeconds: clampInt(setting("timerSeconds", 0), 0, 60)
   readonly property bool includeCursor: setting("includeCursor", false) === true
   readonly property bool recordDesktopAudio: setting("recordDesktopAudio", false) === true
@@ -35,6 +35,15 @@ Item {
     var parsed = parseInt(value, 10)
     if (!isFinite(parsed)) parsed = min
     return Math.max(min, Math.min(max, parsed))
+  }
+
+  function normalizeSaveLocation(value) {
+    var requested = String(value || "pictures")
+    var symbolic = requested.toLowerCase()
+    if (symbolic === "pictures" || symbolic === "videos"
+        || symbolic === "documents" || symbolic === "downloads") return symbolic
+    if (requested.charAt(0) === "/") return requested
+    return "pictures"
   }
 
   function currentSettings() {
@@ -249,7 +258,7 @@ Item {
   }
 
   function setSaveLocation(value) {
-    var next = String(value || "pictures")
+    var next = normalizeSaveLocation(value)
     saveSettings({ saveLocation: next })
     return next
   }

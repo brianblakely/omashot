@@ -131,7 +131,6 @@ directory_for_location() {
   load_user_dirs
 
   case "${SAVE_LOCATION,,}" in
-  desktop) printf '%s\n' "${XDG_DESKTOP_DIR:-$HOME/Desktop}" ;;
   documents) printf '%s\n' "${XDG_DOCUMENTS_DIR:-$HOME/Documents}" ;;
   downloads) printf '%s\n' "${XDG_DOWNLOAD_DIR:-$HOME/Downloads}" ;;
   videos) printf '%s\n' "${XDG_VIDEOS_DIR:-$HOME/Videos}" ;;
@@ -144,7 +143,6 @@ recording_directory() {
   load_user_dirs
 
   case "${SAVE_LOCATION,,}" in
-  desktop) printf '%s\n' "${XDG_DESKTOP_DIR:-$HOME/Desktop}" ;;
   documents) printf '%s\n' "${XDG_DOCUMENTS_DIR:-$HOME/Documents}" ;;
   downloads) printf '%s\n' "${XDG_DOWNLOAD_DIR:-$HOME/Downloads}" ;;
   /*) printf '%s\n' "$SAVE_LOCATION" ;;

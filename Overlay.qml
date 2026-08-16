@@ -1415,12 +1415,10 @@ Item {
             : (root.recordingMode ? "videos" : "pictures")
           options: root.recordingMode ? [
             { value: "videos", label: "Videos" },
-            { value: "desktop", label: "Desktop" },
             { value: "documents", label: "Documents" },
             { value: "downloads", label: "Downloads" }
           ] : [
             { value: "pictures", label: "Pictures" },
-            { value: "desktop", label: "Desktop" },
             { value: "documents", label: "Documents" },
             { value: "downloads", label: "Downloads" }
           ]

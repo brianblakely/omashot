@@ -45,6 +45,10 @@ rg --fixed-strings --quiet -- 'SHELL_CONFIG_FILE="$HOME/.config/omarchy/shell.js
   fail "the helper does not read Omarchy shell configuration"
 rg --fixed-strings --quiet -- 'first(.plugins[]? | select(.id == $id)) // {}' "$HELPER" ||
   fail "the helper does not select its b.omashot plugin entry"
+assert_source_absent 'XDG_DESKTOP_DIR' "$HELPER" \
+  "the helper still recognizes Desktop as a destination"
+rg --fixed-strings --quiet -- 'var next = normalizeSaveLocation(value)' "$SERVICE" ||
+  fail "the service accepts unrecognized symbolic save locations"
 
 mkdir -p "$TEST_HOME/.config/omarchy" "$STUB_BIN" "$OUTPUT_DIR"
 

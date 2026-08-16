@@ -91,6 +91,9 @@ if rg --fixed-strings --quiet -- 'captureScreenTarget(' <<<"$whole_screen_functi
 fi
 assert_contains 'onActivated: root.captureWholeScreen()' "the Space shortcut is missing"
 
+assert_absent '{ value: "desktop", label: "Desktop" }' \
+  "Desktop is still offered as a capture destination"
+
 assert_contains 'property bool recordingPresentation: false' \
   "the overlay does not track the persistent recording scrim"
 assert_contains 'function onRecordingPresentationRequested()' \
