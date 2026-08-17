@@ -66,7 +66,7 @@ Item {
   readonly property bool canRunSelected: recording || hasCaptureTarget
   readonly property bool showSelectionFrame: hasSelection && targetKind === "region"
   readonly property int minimumSelectionSize: 1
-  readonly property real pointerDragThreshold: Style.space(10)
+  readonly property real pointerDragThreshold: Style.space(20)
   readonly property real topEdgeTargetHeight: Math.max(1, Style.space(4))
   readonly property real regionBorderWidth: Math.max(1, Style.normalBorderWidth)
 
