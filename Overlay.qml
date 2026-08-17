@@ -39,7 +39,9 @@ Item {
   property bool regionOnlyPicker: false
   property bool freezeOpenPending: false
   property bool freezeCapturePending: false
+  property bool freezeRestartPending: false
   property bool demoCaptureHeld: false
+  property bool escapeDismissPending: false
   property bool recordingPresentation: false
   property bool recordingPresentationConfirmed: false
   property var pickerClients: []
@@ -73,6 +75,7 @@ Item {
   function open(payloadJson) {
     if (recordingPresentation) return
 
+    escapeDismissPending = false
     var payload = ({})
     try { payload = JSON.parse(payloadJson || "{}") || ({}) } catch (e) { payload = ({}) }
 
@@ -99,9 +102,12 @@ Item {
   function close() {
     var preserveFreeze = freezeCapturePending && freezeProc.running
     opened = false
+    escapeDismissPending = false
     freezeOpenPending = false
     freezeCapturePending = false
+    freezeRestartPending = false
     freezeOpenTimer.stop()
+    freezeRestartTimer.stop()
     recordingStartTimeout.stop()
     if (preserveFreeze) freezeCaptureCleanupTimer.restart()
     else {
@@ -217,14 +223,27 @@ Item {
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
+  function startFreeze() {
+    if (!freezeOpenPending || freezeProc.running) return
+
+    freezeRestartPending = false
+    freezeProc.running = true
+    freezeOpenTimer.restart()
+  }
+
   function freezeAndShowOverlay() {
     opened = false
     freezeOpenPending = true
     freezeCapturePending = false
     freezeCaptureCleanupTimer.stop()
-    if (freezeProc.running) freezeProc.running = false
-    freezeProc.running = true
-    freezeOpenTimer.restart()
+    freezeOpenTimer.stop()
+    freezeRestartTimer.stop()
+    if (freezeProc.running) {
+      freezeRestartPending = true
+      freezeProc.running = false
+      return
+    }
+    startFreeze()
   }
 
   function beginRecordingPresentation() {
@@ -1021,6 +1040,18 @@ Item {
   Process {
     id: freezeProc
     command: ["hyprpicker", "-r", "-z", "-q"]
+    onExited: {
+      if (root.freezeRestartPending) freezeRestartTimer.restart()
+    }
+  }
+
+  Timer {
+    id: freezeRestartTimer
+    // Give Hyprland a frame without either Omashot or the old frozen surface
+    // before hyprpicker captures the replacement.
+    interval: 50
+    repeat: false
+    onTriggered: root.startFreeze()
   }
 
   Timer {
@@ -1298,7 +1329,7 @@ Item {
           root.demoCaptureHeld = true
           event.accepted = true
         } else if (event.key === Qt.Key_Escape) {
-          root.handleEscape()
+          root.escapeDismissPending = true
           event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
           root.captureSelectedTarget(panel.currentScreenName)
@@ -1311,6 +1342,11 @@ Item {
         if (root.isDemoCaptureRelease(event)) {
           root.demoCaptureHeld = false
           event.accepted = true
+        } else if (event.key === Qt.Key_Escape) {
+          var shouldDismiss = root.escapeDismissPending
+          root.escapeDismissPending = false
+          event.accepted = true
+          if (shouldDismiss) root.handleEscape()
         }
       }
     }

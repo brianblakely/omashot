@@ -69,6 +69,28 @@ assert_contains 'if (action === "region-draw-pending" || action === "region-move
 assert_contains 'root.captureSelectedTarget(panel.currentScreenName)' \
   "Enter does not execute the selected capture target"
 
+key_catcher=$(sed -n '/id: keyCatcher/,/^    Shortcut {/p' "$OVERLAY")
+escape_press=$(sed -n '/Keys.onPressed: function(event)/,/Keys.onReleased: function(event)/p' <<<"$key_catcher")
+escape_release=$(sed -n '/Keys.onReleased: function(event)/,$p' <<<"$key_catcher")
+rg --fixed-strings --quiet -- 'root.escapeDismissPending = true' <<<"$escape_press" ||
+  fail "Escape does not keep the overlay focused until key release"
+if rg --fixed-strings --quiet -- 'root.handleEscape()' <<<"$escape_press"; then
+  fail "Escape dismisses the overlay before key release"
+fi
+rg --fixed-strings --quiet -- 'if (shouldDismiss) root.handleEscape()' <<<"$escape_release" ||
+  fail "releasing Escape does not dismiss the overlay"
+
+freeze_refresh=$(sed -n '/^  function freezeAndShowOverlay()/,/^  }/p' "$OVERLAY")
+rg --fixed-strings --quiet -- 'freezeRestartPending = true' <<<"$freeze_refresh" ||
+  fail "reopening the overlay does not queue a new freeze frame"
+if rg --fixed-strings --quiet -- 'freezeProc.running = true' <<<"$freeze_refresh"; then
+  fail "the freeze frame restarts before its previous surface exits"
+fi
+assert_contains 'if (root.freezeRestartPending) freezeRestartTimer.restart()' \
+  "the freeze frame is not refreshed after its previous surface exits"
+assert_contains 'onTriggered: root.startFreeze()' \
+  "the refreshed freeze frame does not wait for the desktop to repaint"
+
 region_box=$(sed -n '/id: selectionBox/,/MouseArea {/p' "$OVERLAY")
 rg --fixed-strings --quiet -- 'color: "transparent"' <<<"$region_box" ||
   fail "the region box has a fill"
