@@ -98,6 +98,14 @@ assert_contains 'onTriggered: root.startFreeze()' \
 region_box=$(sed -n '/id: selectionBox/,/MouseArea {/p' "$OVERLAY")
 rg --fixed-strings --quiet -- 'color: "transparent"' <<<"$region_box" ||
   fail "the region box has a fill"
+rg --fixed-strings --quiet -- 'x: root.selectionX - root.regionBorderWidth' <<<"$region_box" ||
+  fail "the region border occupies the left side of the captured region"
+rg --fixed-strings --quiet -- 'y: root.selectionY - root.regionBorderWidth' <<<"$region_box" ||
+  fail "the region border occupies the top of the captured region"
+rg --fixed-strings --quiet -- 'width: root.selectionW + root.regionBorderWidth * 2' <<<"$region_box" ||
+  fail "the region border occupies the right side of the captured region"
+rg --fixed-strings --quiet -- 'height: root.selectionH + root.regionBorderWidth * 2' <<<"$region_box" ||
+  fail "the region border occupies the bottom of the captured region"
 assert_absent 'visible: root.hasSelection && root.targetKind === "window"' \
   "window targets still draw a border layer"
 assert_absent 'opacity: 0.72' "the Omarchy scrim color has an additional opacity multiplier"

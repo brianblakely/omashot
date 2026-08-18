@@ -1242,10 +1242,11 @@ Item {
 
       Rectangle {
         id: selectionBox
-        x: root.selectionX
-        y: root.selectionY
-        width: root.selectionW
-        height: root.selectionH
+        // Rectangle borders render inward, so expand the frame to keep it out of the capture.
+        x: root.selectionX - root.regionBorderWidth
+        y: root.selectionY - root.regionBorderWidth
+        width: root.selectionW + root.regionBorderWidth * 2
+        height: root.selectionH + root.regionBorderWidth * 2
         visible: root.showSelectionFrame && !root.recordingPresentation
         color: "transparent"
         border.color: Color.accent
