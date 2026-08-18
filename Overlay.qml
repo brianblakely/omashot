@@ -466,13 +466,13 @@ Item {
 
     if (pointerAction === "draw")
       setSelection(pointerStartX, pointerStartY, minimumSelectionSize, minimumSelectionSize, maxWidth, maxHeight)
-    else if (pointerAction !== "region-draw-pending" && pointerAction !== "region-move-pending")
+    else if (pointerAction !== "region-draw-pending")
       ensureSelection(maxWidth, maxHeight, screenName)
   }
 
   function beginRegionPointer(action, x, y, maxWidth, maxHeight, screenName) {
-    var pendingAction = String(action || "draw") === "move" ? "region-move-pending" : "region-draw-pending"
-    beginPointer(pendingAction, x, y, maxWidth, maxHeight, screenName)
+    var nextAction = String(action || "draw") === "move" ? "move" : "region-draw-pending"
+    beginPointer(nextAction, x, y, maxWidth, maxHeight, screenName)
   }
 
   function beginTargetPointer(x, y, maxWidth, maxHeight, screenName) {
@@ -516,15 +516,11 @@ Item {
     var dx = px - pointerStartX
     var dy = py - pointerStartY
 
-    if (pointerAction === "region-draw-pending" || pointerAction === "region-move-pending") {
+    if (pointerAction === "region-draw-pending") {
       if (Math.abs(dx) + Math.abs(dy) < pointerDragThreshold) return
 
-      if (pointerAction === "region-draw-pending") {
-        pointerAction = "draw"
-        setSelection(pointerStartX, pointerStartY, minimumSelectionSize, minimumSelectionSize, maxWidth, maxHeight)
-      } else {
-        pointerAction = "move"
-      }
+      pointerAction = "draw"
+      setSelection(pointerStartX, pointerStartY, minimumSelectionSize, minimumSelectionSize, maxWidth, maxHeight)
     }
 
     if (pointerAction === "pending") {
@@ -567,7 +563,7 @@ Item {
   function finishRegionPointer(maxWidth, maxHeight) {
     var action = pointerAction
     var placeExisting = pointerHadSelection
-      && (action === "region-draw-pending" || action === "region-move-pending")
+      && action === "region-draw-pending"
     var x = pointerStartX
     var y = pointerStartY
     var width = pointerSelectionW
@@ -580,7 +576,7 @@ Item {
   function finishTargetPointer(maxWidth, maxHeight, screenName) {
     var action = pointerAction
 
-    if (action === "region-draw-pending" || action === "region-move-pending") {
+    if (action === "region-draw-pending") {
       finishRegionPointer(maxWidth, maxHeight)
       if (hasSelection) {
         targetKind = "region"

@@ -64,8 +64,12 @@ assert_contains 'if (targetKind === "region" && hasSelection) {' \
   "hovering outside a region can still replace it with a screen or window target"
 assert_contains 'if (regionOnlyPicker || (targetKind === "region" && hasSelection)) {' \
   "an existing region does not disable screen and window pointer targeting"
-assert_contains 'if (action === "region-draw-pending" || action === "region-move-pending") {' \
+assert_contains 'if (action === "region-draw-pending") {' \
   "clicking outside an existing region does not remain a region operation"
+assert_contains 'var nextAction = String(action || "draw") === "move" ? "move" : "region-draw-pending"' \
+  "moving an existing region does not start immediately"
+assert_absent 'region-move-pending' \
+  "moving an existing region is still subject to the drag threshold"
 assert_contains 'root.captureSelectedTarget(panel.currentScreenName)' \
   "Enter does not execute the selected capture target"
 
