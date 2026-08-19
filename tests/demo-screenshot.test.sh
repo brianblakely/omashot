@@ -40,7 +40,7 @@ assert_contains 'freezePidForScreenshot(), demoCaptureHeld' "$OVERLAY" \
   "screenshot requests do not carry the held demo-capture state"
 assert_contains 'service.recordGeometry(geometry, targetScreen, demoCaptureHeld)' "$OVERLAY" \
   "region recording requests do not carry the held demo-capture state"
-assert_contains 'service.record("screen", demoCaptureHeld)' "$OVERLAY" \
+assert_contains 'service.record("screen", demoCaptureHeld, screenName, targetGeometry)' "$OVERLAY" \
   "screen recording requests do not carry the held demo-capture state"
 assert_contains 'sequence: "Shift+Space"' "$OVERLAY" \
   "holding tilde prevents the Space capture shortcut"

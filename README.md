@@ -30,7 +30,7 @@ omarchy plugin add https://github.com/brianblakely/omashot.git
 
 * Press `Space` to capture the whole screen at any time.
 * Press `Enter` to capture a highlighted window or a region.
-* Press `Escape` to end a screen recording.
+* Press `Escape` to end a screen recording. When Keystroke Display is enabled, hold `Escape` for two seconds.
 
 ### Tweak Region Sizing and Position with the Keyboard
 
@@ -55,6 +55,8 @@ o.bind("PRINT", "Omashot", "omarchy-shell b.omashot show")
 * `omarchy-shell b.omashot captureToClipboard`
 * `omarchy-shell b.omashot record`
 * `omarchy-shell b.omashot stopRecording`
+* `omarchy-shell b.omashot keystrokes true`
+* `omarchy-shell b.omashot keystrokes false`
 
 ## Update
 

@@ -130,6 +130,7 @@ Item {
   }
 
   function handleEscape() {
+    if (recording && service && service.recordKeystrokes) return
     if (recording && service && typeof service.stopRecording === "function") {
       service.stopRecording()
       return
@@ -208,6 +209,7 @@ Item {
     else if (name === "desktopAudio") service.setRecordDesktopAudio(!service.recordDesktopAudio)
     else if (name === "microphoneAudio") service.setRecordMicrophoneAudio(!service.recordMicrophoneAudio)
     else if (name === "webcam") service.setRecordWebcam(!service.recordWebcam)
+    else if (name === "keystrokes") service.setRecordKeystrokes(!service.recordKeystrokes)
   }
 
   function normalizePickerAction(action) {
@@ -662,10 +664,11 @@ Item {
 
   function captureScreenTarget(screenName) {
     if (!service) return
+    var targetGeometry = "0,0 " + Math.round(panel.width) + "x" + Math.round(panel.height)
     if (pickerMode) {
-      if (pickerAction === "record") service.record("screen", demoCaptureHeld)
+      if (pickerAction === "record") service.record("screen", demoCaptureHeld, screenName, targetGeometry)
       else takeScreenshot("screen", pickerAction === "clipboard" ? "clipboard" : "file")
-    } else if (recordingMode) service.record("screen", demoCaptureHeld)
+    } else if (recordingMode) service.record("screen", demoCaptureHeld, screenName, targetGeometry)
     else takeScreenshot("screen")
   }
 
@@ -1501,6 +1504,14 @@ Item {
           checked: service && service.recordMicrophoneAudio
           visible: root.recordingMode || root.recording
           onClicked: root.toggleBoolean("microphoneAudio")
+        }
+
+        MenuButton {
+          iconText: "󰌌"
+          tooltipText: "Keystrokes: " + (service && service.recordKeystrokes ? "On" : "Off")
+          checked: service && service.recordKeystrokes
+          visible: root.recordingMode || root.recording
+          onClicked: root.toggleBoolean("keystrokes")
         }
 
         MenuButton {

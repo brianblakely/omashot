@@ -10,6 +10,7 @@ STATE_FILE="$STATE_DIR/state.json"
 TMP_DIR="${TMPDIR:-/tmp}"
 RECORDING_FILE="/tmp/omarchy-screenrecord-filename"
 RECORDING_ESCAPE_MARKER="$STATE_DIR/recording-escape-bound"
+RECORDING_CONTEXT_FILE="$STATE_DIR/recording-context.json"
 
 COMMAND="${1:-help}"
 TARGET="${2:-selection}"
@@ -25,9 +26,12 @@ SCREENSHOT_EDITOR="tensaku-edit"
 DESKTOP_AUDIO="false"
 MICROPHONE_AUDIO="false"
 WEBCAM="false"
+RECORD_KEYSTROKES="false"
 GEOMETRY=""
 SCREEN_NAME=""
 CAPTURE_ACTION=""
+TARGET_GEOMETRY=""
+PASS_MODIFIERS=""
 # A freeze handed off by the overlay remains visible through grim and becomes
 # this process's responsibility to stop, including on failure.
 CAPTURE_FREEZE_PID=""
@@ -79,6 +83,7 @@ load_shell_settings() {
   DESKTOP_AUDIO=$(shell_setting_boolean recordDesktopAudio)
   MICROPHONE_AUDIO=$(shell_setting_boolean recordMicrophoneAudio)
   WEBCAM=$(shell_setting_boolean recordWebcam)
+  RECORD_KEYSTROKES=$(shell_setting_boolean recordKeystrokes)
 }
 
 capture_context_string() {
@@ -94,13 +99,15 @@ load_capture_context() {
     fail "capture context must be a JSON object"
 
   local unknown_keys
-  unknown_keys=$(jq -r 'keys - ["action", "freezePid", "geometry", "screenName"] | join(", ")' \
+  unknown_keys=$(jq -r 'keys - ["action", "freezePid", "geometry", "modifiers", "screenName", "targetGeometry"] | join(", ")' \
     <<<"$CAPTURE_CONTEXT")
   [[ -z $unknown_keys ]] || fail "unknown capture context: $unknown_keys"
 
   CAPTURE_ACTION=$(capture_context_string action)
   GEOMETRY=$(capture_context_string geometry)
   SCREEN_NAME=$(capture_context_string screenName)
+  TARGET_GEOMETRY=$(capture_context_string targetGeometry)
+  PASS_MODIFIERS=$(capture_context_string modifiers)
   CAPTURE_FREEZE_PID=$(jq -r '
     if .freezePid == null then "" else (.freezePid | tostring) end
   ' <<<"$CAPTURE_CONTEXT")
@@ -189,6 +196,38 @@ focused_workspace_id() {
 
 focused_display_geometry() {
   hyprctl monitors -j | jq -r "${JQ_MONITOR_GEO} .[] | select(.focused == true) | format_geo" | head -1
+}
+
+recording_screen_name() {
+  local selected=""
+  if [[ -n $SCREEN_NAME ]]; then
+    selected=$(hyprctl monitors -j | jq -r --arg screen "$SCREEN_NAME" \
+      'first(.[] | select(.name == $screen) | .name) // empty' 2>/dev/null)
+  fi
+  [[ -n $selected ]] || selected=$(hyprctl monitors -j | jq -r \
+    'first(.[] | select(.focused == true) | .name) // empty' 2>/dev/null)
+  printf '%s\n' "$selected"
+}
+
+display_geometry_for_screen() {
+  local screen_name="$1"
+  hyprctl monitors -j | jq -r --arg screen "$screen_name" "${JQ_MONITOR_GEO}
+    first(.[] | select(.name == \$screen)) // empty | if . == \"\" then empty else format_geo end
+  " 2>/dev/null
+}
+
+screen_name_for_geometry() {
+  local geometry="$1"
+  [[ $geometry =~ ^(-?[0-9]+),(-?[0-9]+)[[:space:]]([0-9]+)x([0-9]+)$ ]] || return 1
+
+  local center_x=$((BASH_REMATCH[1] + BASH_REMATCH[3] / 2))
+  local center_y=$((BASH_REMATCH[2] + BASH_REMATCH[4] / 2))
+  hyprctl monitors -j | jq -r --argjson x "$center_x" --argjson y "$center_y" '
+    def logical_width: if .transform == 1 or .transform == 3 then (.height / .scale) else (.width / .scale) end;
+    def logical_height: if .transform == 1 or .transform == 3 then (.width / .scale) else (.height / .scale) end;
+    first(.[] | select($x >= .x and $x < (.x + logical_width)
+      and $y >= .y and $y < (.y + logical_height)) | .name) // empty
+  ' 2>/dev/null
 }
 
 monitor_rectangles() {
@@ -376,6 +415,29 @@ write_state() {
       + (if $recording != "" then {lastRecording: $recording} else {} end)
       + {updatedAt: $updatedAt}
     ' >"$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+}
+
+write_recording_context() {
+  local geometry="$1" screen_name="$2"
+  geometry=$(normalize_geometry "$geometry") || return 1
+
+  mkdir -p "$STATE_DIR" 2>/dev/null || return 1
+  jq -n \
+    --arg geometry "$geometry" \
+    --arg screenName "$screen_name" \
+    '{geometry:$geometry,screenName:$screenName}' \
+    >"$RECORDING_CONTEXT_FILE.tmp" && mv "$RECORDING_CONTEXT_FILE.tmp" "$RECORDING_CONTEXT_FILE"
+}
+
+clear_recording_context() {
+  rm -f -- "$RECORDING_CONTEXT_FILE" "$RECORDING_CONTEXT_FILE.tmp"
+}
+
+recording_context_value() {
+  local key="$1"
+  [[ -r $RECORDING_CONTEXT_FILE ]] || return 0
+  jq -r --arg key "$key" 'if (.[$key] | type) == "string" then .[$key] else "" end' \
+    "$RECORDING_CONTEXT_FILE" 2>/dev/null
 }
 
 pick_geometry() {
@@ -574,9 +636,145 @@ install_recording_escape_binding() {
   mkdir -p "$STATE_DIR" 2>/dev/null || return 0
 
   local lua
-  lua='if omashot_recording_escape_bind then omashot_recording_escape_bind:unbind() end; omashot_recording_escape_bind = hl.bind("ESCAPE", hl.dsp.exec_cmd("omarchy-shell b.omashot stopRecording"), { description = "Stop Omashot recording" })'
+  lua='
+    if omashot_recording_keybinds then
+      for _, binding in ipairs(omashot_recording_keybinds) do binding:unbind() end
+    end
+    if omashot_recording_escape_bind then
+      omashot_recording_escape_bind:unbind()
+      omashot_recording_escape_bind = nil
+    end
+    omashot_recording_keybinds = {
+      (hl.bind("ESCAPE", hl.dsp.exec_cmd("omarchy-shell b.omashot stopRecording"), {
+        description = "Stop Omashot recording",
+        locked = false,
+        dont_inhibit = false,
+        allow_input_capture = false,
+      }))
+    }
+  '
   if hyprctl eval "$lua" >/dev/null 2>&1; then
+    printf 'immediate\n' >"$RECORDING_ESCAPE_MARKER"
+  else
     : >"$RECORDING_ESCAPE_MARKER"
+    remove_recording_escape_binding
+    return 1
+  fi
+}
+
+install_recording_keystroke_bindings() {
+  command -v hyprctl >/dev/null 2>&1 || return 0
+  mkdir -p "$STATE_DIR" 2>/dev/null || return 0
+
+  local lua
+  read -r -d '' lua <<'LUA' || true
+if omashot_recording_keybinds then
+  for _, binding in ipairs(omashot_recording_keybinds) do binding:unbind() end
+end
+if omashot_recording_escape_bind then
+  omashot_recording_escape_bind:unbind()
+  omashot_recording_escape_bind = nil
+end
+
+omashot_recording_keybinds = {}
+
+local ordinary = {
+  { "A", "key-a" }, { "B", "key-b" }, { "C", "key-c" },
+  { "D", "key-d" }, { "E", "key-e" }, { "F", "key-f" },
+  { "G", "key-g" }, { "H", "key-h" }, { "I", "key-i" },
+  { "J", "key-j" }, { "K", "key-k" }, { "L", "key-l" },
+  { "M", "key-m" }, { "N", "key-n" }, { "O", "key-o" },
+  { "P", "key-p" }, { "Q", "key-q" }, { "R", "key-r" },
+  { "S", "key-s" }, { "T", "key-t" }, { "U", "key-u" },
+  { "V", "key-v" }, { "W", "key-w" }, { "X", "key-x" },
+  { "Y", "key-y" }, { "Z", "key-z" },
+  { "0", "key-0" }, { "1", "key-1" }, { "2", "key-2" },
+  { "3", "key-3" }, { "4", "key-4" }, { "5", "key-5" },
+  { "6", "key-6" }, { "7", "key-7" }, { "8", "key-8" },
+  { "9", "key-9" },
+  { "SPACE", "key-space" }, { "GRAVE", "key-grave" },
+  { "MINUS", "key-minus" }, { "EQUAL", "key-equal" },
+  { "BRACKETLEFT", "key-bracket-left" },
+  { "BRACKETRIGHT", "key-bracket-right" },
+  { "BACKSLASH", "key-backslash" }, { "SEMICOLON", "key-semicolon" },
+  { "APOSTROPHE", "key-apostrophe" }, { "COMMA", "key-comma" },
+  { "PERIOD", "key-period" }, { "SLASH", "key-slash" },
+  { "TAB", "key-tab" }, { "RETURN", "key-enter" },
+  { "BACKSPACE", "key-backspace" }, { "INSERT", "key-insert" },
+  { "DELETE", "key-delete" }, { "HOME", "key-home" },
+  { "END", "key-end" }, { "PRIOR", "key-page-up" },
+  { "NEXT", "key-page-down" }, { "LEFT", "key-left" },
+  { "RIGHT", "key-right" }, { "UP", "key-up" },
+  { "DOWN", "key-down" }, { "CAPS_LOCK", "key-caps-lock" },
+  { "NUM_LOCK", "key-num-lock" }, { "PRINT", "key-print" },
+  { "PAUSE", "key-pause" },
+  { "F1", "key-f1" }, { "F2", "key-f2" }, { "F3", "key-f3" },
+  { "F4", "key-f4" }, { "F5", "key-f5" }, { "F6", "key-f6" },
+  { "F7", "key-f7" }, { "F8", "key-f8" }, { "F9", "key-f9" },
+  { "F10", "key-f10" }, { "F11", "key-f11" }, { "F12", "key-f12" },
+  { "KP_0", "key-kp-0" }, { "KP_1", "key-kp-1" },
+  { "KP_2", "key-kp-2" }, { "KP_3", "key-kp-3" },
+  { "KP_4", "key-kp-4" }, { "KP_5", "key-kp-5" },
+  { "KP_6", "key-kp-6" }, { "KP_7", "key-kp-7" },
+  { "KP_8", "key-kp-8" }, { "KP_9", "key-kp-9" },
+  { "KP_DECIMAL", "key-kp-decimal" }, { "KP_DIVIDE", "key-kp-divide" },
+  { "KP_MULTIPLY", "key-kp-multiply" }, { "KP_SUBTRACT", "key-kp-subtract" },
+  { "KP_ADD", "key-kp-add" }, { "KP_ENTER", "key-kp-enter" },
+  { "KP_EQUAL", "key-kp-equal" },
+}
+
+local modifiers = {
+  { "CTRL + CONTROL_L", "modifier-ctrl-left" },
+  { "CTRL + CONTROL_R", "modifier-ctrl-right" },
+  { "SHIFT + SHIFT_L", "modifier-shift-left" },
+  { "SHIFT + SHIFT_R", "modifier-shift-right" },
+  { "ALT + ALT_L", "modifier-alt-left" },
+  { "ALT + ALT_R", "modifier-alt-right" },
+  { "SUPER + SUPER_L", "modifier-super-left" },
+  { "SUPER + SUPER_R", "modifier-super-right" },
+}
+
+for _, entry in ipairs(ordinary) do
+  local binding = hl.bind(entry[1], hl.dsp.global("b.omashot:" .. entry[2]), {
+    description = "Show key in Omashot recording",
+    non_consuming = true,
+    ignore_mods = true,
+    repeating = true,
+    locked = false,
+    dont_inhibit = false,
+    allow_input_capture = false,
+  })
+  table.insert(omashot_recording_keybinds, binding)
+end
+
+for _, entry in ipairs(modifiers) do
+  local binding = hl.bind(entry[1], hl.dsp.global("b.omashot:" .. entry[2]), {
+    description = "Track modifier in Omashot recording",
+    non_consuming = true,
+    ignore_mods = true,
+    locked = false,
+    dont_inhibit = false,
+    allow_input_capture = false,
+  })
+  table.insert(omashot_recording_keybinds, binding)
+end
+
+local escape_binding = hl.bind("ESCAPE", hl.dsp.global("b.omashot:key-escape"), {
+  description = "Hold Escape to stop Omashot recording",
+  ignore_mods = true,
+  locked = false,
+  dont_inhibit = false,
+  allow_input_capture = false,
+})
+table.insert(omashot_recording_keybinds, escape_binding)
+LUA
+
+  if hyprctl eval "$lua" >/dev/null 2>&1; then
+    printf 'keystrokes\n' >"$RECORDING_ESCAPE_MARKER"
+  else
+    : >"$RECORDING_ESCAPE_MARKER"
+    remove_recording_escape_binding
+    return 1
   fi
 }
 
@@ -584,10 +782,47 @@ remove_recording_escape_binding() {
   [[ -e $RECORDING_ESCAPE_MARKER ]] || return 0
 
   if command -v hyprctl >/dev/null 2>&1; then
-    hyprctl eval 'if omashot_recording_escape_bind then omashot_recording_escape_bind:unbind(); omashot_recording_escape_bind = nil end' \
-      >/dev/null 2>&1 || return 0
+    hyprctl eval '
+      if omashot_recording_keybinds then
+        for _, binding in ipairs(omashot_recording_keybinds) do binding:unbind() end
+        omashot_recording_keybinds = nil
+      end
+      if omashot_recording_escape_bind then
+        omashot_recording_escape_bind:unbind()
+        omashot_recording_escape_bind = nil
+      end
+    ' >/dev/null 2>&1 || return 0
   fi
   rm -f -- "$RECORDING_ESCAPE_MARKER"
+}
+
+recording_session_locked() {
+  if command -v omarchy-hyprland-session-locked >/dev/null 2>&1; then
+    omarchy-hyprland-session-locked >/dev/null 2>&1
+    return $?
+  fi
+
+  hyprctl monitors -j 2>/dev/null | jq -e \
+    'any(.[]; (.solitaryBlockedBy // []) | index("LOCK"))' >/dev/null 2>&1
+}
+
+sync_recording_bindings() {
+  if ! recording_active || recording_session_locked; then
+    remove_recording_escape_binding
+    return 0
+  fi
+
+  local desired="immediate" current=""
+  truthy "$RECORD_KEYSTROKES" && desired="keystrokes"
+  [[ -r $RECORDING_ESCAPE_MARKER ]] && current=$(<"$RECORDING_ESCAPE_MARKER")
+  [[ $current == "$desired" ]] && return 0
+
+  remove_recording_escape_binding
+  if [[ $desired == "keystrokes" ]]; then
+    install_recording_keystroke_bindings
+  else
+    install_recording_escape_binding
+  fi
 }
 
 cleanup_webcam() {
@@ -648,9 +883,13 @@ open_recording_in_omacut() {
 }
 
 record_geometry() {
+  if ! recording_active; then
+    remove_recording_escape_binding
+    clear_recording_context
+  fi
   require_command gpu-screen-recorder
 
-  local output_dir selection region filename audio_devices
+  local output_dir selection region filename audio_devices target_screen
   output_dir=$(recording_directory)
   mkdir -p "$output_dir"
 
@@ -687,8 +926,14 @@ record_geometry() {
   if kill -0 "$pid" 2>/dev/null; then
     printf '%s\n' "$filename" >"$RECORDING_FILE"
     write_state "" "" "$filename"
+    target_screen="$SCREEN_NAME"
+    [[ -n $target_screen ]] || target_screen=$(screen_name_for_geometry "$selection")
+    write_recording_context "$selection" "$target_screen" || true
     refresh_recording_indicator
-    install_recording_escape_binding
+    sync_recording_bindings
+  else
+    clear_recording_context
+    remove_recording_escape_binding
   fi
 }
 
@@ -698,13 +943,27 @@ record_screen() {
     return
   fi
 
+  if ! recording_active; then
+    remove_recording_escape_binding
+    clear_recording_context
+  fi
   require_command omarchy-capture-screenrecording
 
-  local output_dir
+  local output_dir target_screen target_geometry
   output_dir=$(recording_directory)
   mkdir -p "$output_dir"
 
   wait_for_timer
+
+  if [[ -n $SCREEN_NAME ]] && command -v hyprctl >/dev/null 2>&1; then
+    hyprctl dispatch focusmonitor "$SCREEN_NAME" >/dev/null 2>&1 || true
+  fi
+  target_screen=$(recording_screen_name)
+  if [[ -n $TARGET_GEOMETRY && -n $SCREEN_NAME ]]; then
+    target_geometry=$(geometry_with_screen_offset "$TARGET_GEOMETRY") || target_geometry=""
+  fi
+  [[ -n $target_geometry ]] || target_geometry=$(display_geometry_for_screen "$target_screen")
+  [[ -n $target_geometry ]] || target_geometry=$(focused_display_geometry)
 
   local args=()
   case "${TARGET,,}" in
@@ -720,7 +979,11 @@ record_screen() {
   OMARCHY_SCREENRECORD_DIR="$output_dir" omarchy-capture-screenrecording "${args[@]}"
   local status=$?
   if ((status == 0)) && recording_active; then
-    install_recording_escape_binding
+    [[ -n $target_geometry ]] && write_recording_context "$target_geometry" "$target_screen" || true
+    sync_recording_bindings
+  else
+    clear_recording_context
+    remove_recording_escape_binding
   fi
   return "$status"
 }
@@ -746,25 +1009,61 @@ stop_recording() {
 
   rm -f -- "$STOP_OUTPUT_FILE"
   STOP_OUTPUT_FILE=""
-  if recording_active; then install_recording_escape_binding; fi
+  if recording_active; then
+    sync_recording_bindings
+  else
+    clear_recording_context
+  fi
   return "$status"
+}
+
+pass_escape() {
+  command -v hyprctl >/dev/null 2>&1 || return 0
+
+  local modifiers
+  case "$PASS_MODIFIERS" in
+  "" | CTRL | SHIFT | ALT | SUPER | "CTRL + SHIFT" | "CTRL + ALT" | "CTRL + SUPER" | "SHIFT + ALT" | "SHIFT + SUPER" | "ALT + SUPER" | "CTRL + SHIFT + ALT" | "CTRL + SHIFT + SUPER" | "CTRL + ALT + SUPER" | "SHIFT + ALT + SUPER" | "CTRL + SHIFT + ALT + SUPER") modifiers="$PASS_MODIFIERS" ;;
+  *) return 1 ;;
+  esac
+
+  hyprctl eval "
+    local target = hl.get_active_window()
+    if target then
+      hl.dispatch(hl.dsp.send_key_state({ state = \"down\", mods = \"$modifiers\", key = \"ESCAPE\", window = target }))
+      hl.dispatch(hl.dsp.send_key_state({ state = \"up\", mods = \"$modifiers\", key = \"ESCAPE\", window = target }))
+    end
+  " >/dev/null 2>&1
 }
 
 status_json() {
   local is_recording="false"
   if recording_active; then
     is_recording="true"
+    if [[ ! -s $RECORDING_CONTEXT_FILE ]]; then
+      local target_screen target_geometry
+      target_screen=$(recording_screen_name)
+      target_geometry=$(display_geometry_for_screen "$target_screen")
+      [[ -n $target_geometry ]] || target_geometry=$(focused_display_geometry)
+      [[ -n $target_geometry ]] && write_recording_context "$target_geometry" "$target_screen" || true
+    fi
+    sync_recording_bindings
   else
     remove_recording_escape_binding
+    clear_recording_context
   fi
 
   mkdir -p "$STATE_DIR" 2>/dev/null || true
   jq -n \
     --argjson recording "$is_recording" \
+    --argjson recordKeystrokes "$RECORD_KEYSTROKES" \
+    --arg recordingGeometry "$(recording_context_value geometry)" \
+    --arg recordingScreenName "$(recording_context_value screenName)" \
     --arg lastSelection "$(last_state_value lastSelection)" \
     --arg lastScreenshot "$(last_state_value lastScreenshot)" \
     --arg lastRecording "$(last_state_value lastRecording)" \
-    '{recording:$recording,lastSelection:$lastSelection,lastScreenshot:$lastScreenshot,lastRecording:$lastRecording}'
+    '{recording:$recording,recordKeystrokes:$recordKeystrokes,
+      recordingGeometry:$recordingGeometry,recordingScreenName:$recordingScreenName,
+      lastSelection:$lastSelection,lastScreenshot:$lastScreenshot,lastRecording:$lastRecording}'
 }
 
 open_last() {
@@ -792,6 +1091,18 @@ record | recording)
   ;;
 stop | stop-recording)
   stop_recording
+  ;;
+pass-escape)
+  pass_escape
+  ;;
+sync-recording-input)
+  case "${TARGET,,}" in
+  true | false) RECORD_KEYSTROKES="${TARGET,,}" ;;
+  esac
+  sync_recording_bindings
+  ;;
+cleanup-recording-input)
+  remove_recording_escape_binding
   ;;
 toggle-recording)
   if recording_active; then stop_recording; else record_screen; fi

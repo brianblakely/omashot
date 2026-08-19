@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
@@ -23,11 +25,133 @@ Item {
   readonly property bool recordDesktopAudio: setting("recordDesktopAudio", false) === true
   readonly property bool recordMicrophoneAudio: setting("recordMicrophoneAudio", false) === true
   readonly property bool recordWebcam: setting("recordWebcam", false) === true
+  readonly property bool recordKeystrokes: setting("recordKeystrokes", false) === true
 
   property bool recording: false
   property string lastStatus: "{}"
   property var pendingCaptureArgs: null
   property bool pendingCaptureKeepsOverlay: false
+  property string recordingTargetScreenName: ""
+  property string recordingTargetGeometry: ""
+  property int recordingTargetX: 0
+  property int recordingTargetY: 0
+  property int recordingTargetW: 0
+  property int recordingTargetH: 0
+  property var keystrokeEntries: []
+  property var pressedKeystrokes: ({})
+  property var pressedModifiers: ({})
+  property double lastKeystrokeAt: 0
+  property bool escapeHeld: false
+  property bool escapeHoldCompleted: false
+  property string escapePassModifiers: ""
+
+  readonly property bool keystrokeOverlayVisible: recording && recordKeystrokes
+    && recordingTargetW > 0 && recordingTargetH > 0
+  readonly property var keystrokeCatalog: [
+    { shortcut: "key-a", label: "A" },
+    { shortcut: "key-b", label: "B" },
+    { shortcut: "key-c", label: "C" },
+    { shortcut: "key-d", label: "D" },
+    { shortcut: "key-e", label: "E" },
+    { shortcut: "key-f", label: "F" },
+    { shortcut: "key-g", label: "G" },
+    { shortcut: "key-h", label: "H" },
+    { shortcut: "key-i", label: "I" },
+    { shortcut: "key-j", label: "J" },
+    { shortcut: "key-k", label: "K" },
+    { shortcut: "key-l", label: "L" },
+    { shortcut: "key-m", label: "M" },
+    { shortcut: "key-n", label: "N" },
+    { shortcut: "key-o", label: "O" },
+    { shortcut: "key-p", label: "P" },
+    { shortcut: "key-q", label: "Q" },
+    { shortcut: "key-r", label: "R" },
+    { shortcut: "key-s", label: "S" },
+    { shortcut: "key-t", label: "T" },
+    { shortcut: "key-u", label: "U" },
+    { shortcut: "key-v", label: "V" },
+    { shortcut: "key-w", label: "W" },
+    { shortcut: "key-x", label: "X" },
+    { shortcut: "key-y", label: "Y" },
+    { shortcut: "key-z", label: "Z" },
+    { shortcut: "key-0", label: "0" },
+    { shortcut: "key-1", label: "1" },
+    { shortcut: "key-2", label: "2" },
+    { shortcut: "key-3", label: "3" },
+    { shortcut: "key-4", label: "4" },
+    { shortcut: "key-5", label: "5" },
+    { shortcut: "key-6", label: "6" },
+    { shortcut: "key-7", label: "7" },
+    { shortcut: "key-8", label: "8" },
+    { shortcut: "key-9", label: "9" },
+    { shortcut: "key-space", label: "Space" },
+    { shortcut: "key-grave", label: "`" },
+    { shortcut: "key-minus", label: "-" },
+    { shortcut: "key-equal", label: "=" },
+    { shortcut: "key-bracket-left", label: "[" },
+    { shortcut: "key-bracket-right", label: "]" },
+    { shortcut: "key-backslash", label: "\\" },
+    { shortcut: "key-semicolon", label: ";" },
+    { shortcut: "key-apostrophe", label: "'" },
+    { shortcut: "key-comma", label: "," },
+    { shortcut: "key-period", label: "." },
+    { shortcut: "key-slash", label: "/" },
+    { shortcut: "key-tab", label: "Tab" },
+    { shortcut: "key-enter", label: "Enter" },
+    { shortcut: "key-backspace", label: "Backspace" },
+    { shortcut: "key-insert", label: "Insert" },
+    { shortcut: "key-delete", label: "Delete" },
+    { shortcut: "key-home", label: "Home" },
+    { shortcut: "key-end", label: "End" },
+    { shortcut: "key-page-up", label: "Page Up" },
+    { shortcut: "key-page-down", label: "Page Down" },
+    { shortcut: "key-left", label: "Left" },
+    { shortcut: "key-right", label: "Right" },
+    { shortcut: "key-up", label: "Up" },
+    { shortcut: "key-down", label: "Down" },
+    { shortcut: "key-caps-lock", label: "Caps Lock" },
+    { shortcut: "key-num-lock", label: "Num Lock" },
+    { shortcut: "key-print", label: "Print Screen" },
+    { shortcut: "key-pause", label: "Pause" },
+    { shortcut: "key-f1", label: "F1" },
+    { shortcut: "key-f2", label: "F2" },
+    { shortcut: "key-f3", label: "F3" },
+    { shortcut: "key-f4", label: "F4" },
+    { shortcut: "key-f5", label: "F5" },
+    { shortcut: "key-f6", label: "F6" },
+    { shortcut: "key-f7", label: "F7" },
+    { shortcut: "key-f8", label: "F8" },
+    { shortcut: "key-f9", label: "F9" },
+    { shortcut: "key-f10", label: "F10" },
+    { shortcut: "key-f11", label: "F11" },
+    { shortcut: "key-f12", label: "F12" },
+    { shortcut: "key-kp-0", label: "Num 0" },
+    { shortcut: "key-kp-1", label: "Num 1" },
+    { shortcut: "key-kp-2", label: "Num 2" },
+    { shortcut: "key-kp-3", label: "Num 3" },
+    { shortcut: "key-kp-4", label: "Num 4" },
+    { shortcut: "key-kp-5", label: "Num 5" },
+    { shortcut: "key-kp-6", label: "Num 6" },
+    { shortcut: "key-kp-7", label: "Num 7" },
+    { shortcut: "key-kp-8", label: "Num 8" },
+    { shortcut: "key-kp-9", label: "Num 9" },
+    { shortcut: "key-kp-decimal", label: "Num ." },
+    { shortcut: "key-kp-divide", label: "Num /" },
+    { shortcut: "key-kp-multiply", label: "Num *" },
+    { shortcut: "key-kp-subtract", label: "Num -" },
+    { shortcut: "key-kp-add", label: "Num +" },
+    { shortcut: "key-kp-enter", label: "Num Enter" },
+    { shortcut: "key-kp-equal", label: "Num =" },
+    { shortcut: "key-escape", label: "Escape", kind: "escape" },
+    { shortcut: "modifier-ctrl-left", label: "Ctrl", kind: "modifier", modifier: "ctrl" },
+    { shortcut: "modifier-ctrl-right", label: "Ctrl", kind: "modifier", modifier: "ctrl" },
+    { shortcut: "modifier-shift-left", label: "Shift", kind: "modifier", modifier: "shift" },
+    { shortcut: "modifier-shift-right", label: "Shift", kind: "modifier", modifier: "shift" },
+    { shortcut: "modifier-alt-left", label: "Alt", kind: "modifier", modifier: "alt" },
+    { shortcut: "modifier-alt-right", label: "Alt", kind: "modifier", modifier: "alt" },
+    { shortcut: "modifier-super-left", label: "Super", kind: "modifier", modifier: "super" },
+    { shortcut: "modifier-super-right", label: "Super", kind: "modifier", modifier: "super" }
+  ]
 
   signal recordingPresentationRequested()
 
@@ -76,18 +200,199 @@ Item {
     return shell.updateEntryInline(pluginId, next)
   }
 
-  function captureContext(geometry, screenName, outputOverride, freezePid) {
+  function captureContext(geometry, screenName, outputOverride, freezePid, targetGeometry, modifiers) {
     var context = ({})
     var selectedGeometry = String(geometry || "").replace(/^\s+|\s+$/g, "")
     var selectedScreen = String(screenName || "")
     var selectedOutput = String(outputOverride || "")
+    var selectedTargetGeometry = String(targetGeometry || "").replace(/^\s+|\s+$/g, "")
+    var selectedModifiers = String(modifiers || "")
     var pid = Math.floor(Number(freezePid))
 
     if (selectedGeometry !== "") context.geometry = selectedGeometry
     if (selectedScreen !== "") context.screenName = selectedScreen
     if (selectedOutput !== "") context.action = selectedOutput
+    if (selectedTargetGeometry !== "") context.targetGeometry = selectedTargetGeometry
+    if (selectedModifiers !== "") context.modifiers = selectedModifiers
     if (isFinite(pid) && pid > 0) context.freezePid = pid
     return JSON.stringify(context)
+  }
+
+  function booleanValue(value) {
+    return value === true || String(value).toLowerCase() === "true"
+  }
+
+  function setRecordingTarget(geometry, screenName) {
+    var value = String(geometry || "").replace(/^\s+|\s+$/g, "")
+    var match = value.match(/^(-?\d+),(-?\d+)\s+(\d+)x(\d+)$/)
+    if (!match || Number(match[3]) <= 0 || Number(match[4]) <= 0) return false
+
+    recordingTargetGeometry = value
+    recordingTargetScreenName = String(screenName || "")
+    recordingTargetX = Number(match[1])
+    recordingTargetY = Number(match[2])
+    recordingTargetW = Number(match[3])
+    recordingTargetH = Number(match[4])
+    return true
+  }
+
+  function clearRecordingTarget() {
+    recordingTargetScreenName = ""
+    recordingTargetGeometry = ""
+    recordingTargetX = 0
+    recordingTargetY = 0
+    recordingTargetW = 0
+    recordingTargetH = 0
+  }
+
+  function activeModifierNames() {
+    var active = ({ ctrl: false, shift: false, alt: false, super: false })
+    var modifiers = pressedModifiers || ({})
+    for (var shortcut in modifiers) {
+      var name = String(modifiers[shortcut] || "")
+      if (active[name] !== undefined) active[name] = true
+    }
+
+    var labels = []
+    if (active.ctrl) labels.push("Ctrl")
+    if (active.shift) labels.push("Shift")
+    if (active.alt) labels.push("Alt")
+    if (active.super) labels.push("Super")
+    return labels
+  }
+
+  function activeModifierDispatch() {
+    var labels = activeModifierNames()
+    var dispatch = []
+    for (var i = 0; i < labels.length; i++) dispatch.push(labels[i].toUpperCase())
+    return dispatch.join(" + ")
+  }
+
+  function appendKeystroke(label, repeated) {
+    var now = Date.now()
+    var entries = keystrokeEntries.slice(0)
+    if (lastKeystrokeAt <= 0 || now - lastKeystrokeAt > 500) entries = []
+
+    var chord = activeModifierNames()
+    chord.push(String(label || ""))
+    var text = chord.join(" + ")
+    var last = entries.length > 0 ? entries[entries.length - 1] : null
+    if (repeated === true && last && String(last.text || "") === text) {
+      entries[entries.length - 1] = {
+        text: text,
+        count: Math.max(1, Number(last.count) || 1) + 1
+      }
+    } else {
+      entries.push({ text: text, count: 1 })
+    }
+
+    // Width trimming is authoritative, but this also bounds retained state if
+    // outputs disappear while a recording is active.
+    if (entries.length > 64) entries = entries.slice(entries.length - 64)
+    keystrokeEntries = entries
+    lastKeystrokeAt = now
+    keystrokeClearTimer.restart()
+  }
+
+  function trimKeystrokes(contentWidth, availableWidth) {
+    var content = Number(contentWidth)
+    var available = Number(availableWidth)
+    if (!isFinite(content) || !isFinite(available) || content <= available
+        || keystrokeEntries.length <= 1) return false
+
+    keystrokeEntries = keystrokeEntries.slice(1)
+    return true
+  }
+
+  function beginEscapeHold() {
+    if (escapeHeld) return
+    escapeHeld = true
+    escapeHoldCompleted = false
+    escapePassModifiers = activeModifierDispatch()
+    escapeHoldTimer.restart()
+  }
+
+  function endEscapeHold() {
+    if (!escapeHeld) return
+
+    var shouldPass = !escapeHoldCompleted && recording && recordKeystrokes
+    var modifiers = escapePassModifiers
+    escapeHeld = false
+    escapeHoldCompleted = false
+    escapePassModifiers = ""
+    escapeHoldTimer.stop()
+
+    if (shouldPass)
+      runDetached(["pass-escape", "", captureContext("", "", "", "", "", modifiers)])
+  }
+
+  function keystrokePressed(entry) {
+    if (!recording || !recordKeystrokes || !entry) return
+
+    var shortcut = String(entry.shortcut || "")
+    if (String(entry.kind || "") === "modifier") {
+      var modifiers = ({})
+      for (var modifierKey in pressedModifiers) modifiers[modifierKey] = pressedModifiers[modifierKey]
+      modifiers[shortcut] = String(entry.modifier || "")
+      pressedModifiers = modifiers
+      return
+    }
+
+    var wasPressed = pressedKeystrokes[shortcut] === true
+    var pressed = ({})
+    for (var key in pressedKeystrokes) pressed[key] = pressedKeystrokes[key]
+    pressed[shortcut] = true
+    pressedKeystrokes = pressed
+    appendKeystroke(entry.label, wasPressed)
+
+    if (String(entry.kind || "") === "escape") beginEscapeHold()
+  }
+
+  function keystrokeReleased(entry) {
+    if (!entry) return
+
+    var shortcut = String(entry.shortcut || "")
+    if (String(entry.kind || "") === "modifier") {
+      var modifiers = ({})
+      for (var modifierKey in pressedModifiers) {
+        if (modifierKey !== shortcut) modifiers[modifierKey] = pressedModifiers[modifierKey]
+      }
+      pressedModifiers = modifiers
+      return
+    }
+
+    var pressed = ({})
+    for (var key in pressedKeystrokes) {
+      if (key !== shortcut) pressed[key] = pressedKeystrokes[key]
+    }
+    pressedKeystrokes = pressed
+    if (String(entry.kind || "") === "escape") endEscapeHold()
+  }
+
+  function clearKeystrokeState(clearTarget) {
+    keystrokeClearTimer.stop()
+    escapeHoldTimer.stop()
+    keystrokeEntries = []
+    pressedKeystrokes = ({})
+    pressedModifiers = ({})
+    lastKeystrokeAt = 0
+    escapeHeld = false
+    escapeHoldCompleted = false
+    escapePassModifiers = ""
+    if (clearTarget === true) clearRecordingTarget()
+  }
+
+  function applyRecorderStatus(raw) {
+    lastStatus = String(raw || "{}").trim() || "{}"
+    var parsed = ({})
+    try { parsed = JSON.parse(lastStatus) || ({}) } catch (e) { parsed = ({}) }
+
+    var active = parsed.recording === true
+    if (active && !recording) clearKeystrokeState(false)
+    if (active && parsed.recordingGeometry)
+      setRecordingTarget(parsed.recordingGeometry, parsed.recordingScreenName)
+    recording = active
+    if (!active) clearKeystrokeState(true)
   }
 
   function runDetached(args) {
@@ -174,23 +479,28 @@ Item {
     var selectedGeometry = String(geometry || "").replace(/^\s+|\s+$/g, "")
     if (selectedGeometry === "") return "missing-geometry"
 
+    clearKeystrokeState(true)
     saveSettings({ captureMode: "record-selection" })
     return runCapture(["record", "selection",
       captureContext(selectedGeometry, screenName, "", "")], includeDemo, true)
   }
 
-  function record(mode, includeDemo) {
+  function record(mode, includeDemo, screenName, targetGeometry) {
     var target = String(mode || "selection")
+    clearKeystrokeState(true)
     saveSettings({ captureMode: target === "screen" ? "record-screen" : "record-selection" })
-    return runCapture(["record", target, captureContext("", "", "", "")], includeDemo)
+    return runCapture(["record", target,
+      captureContext("", screenName, "", "", targetGeometry)], includeDemo)
   }
 
   function stopRecording() {
+    clearKeystrokeState(true)
     hide()
     return runDetached(["stop-recording"])
   }
 
   function toggleRecording() {
+    if (recording) clearKeystrokeState(true)
     hide()
     return runDetached(["toggle-recording", "selection", captureContext("", "", "", "")])
   }
@@ -234,6 +544,9 @@ Item {
       recordDesktopAudio: recordDesktopAudio,
       recordMicrophoneAudio: recordMicrophoneAudio,
       recordWebcam: recordWebcam,
+      recordKeystrokes: recordKeystrokes,
+      recordingTargetScreenName: recordingTargetScreenName,
+      recordingTargetGeometry: recordingTargetGeometry,
       helperPath: helperPath,
       lastStatus: lastStatus
     })
@@ -270,28 +583,78 @@ Item {
   }
 
   function setIncludeCursor(value) {
-    var next = value === true || String(value).toLowerCase() === "true"
+    var next = booleanValue(value)
     saveSettings({ includeCursor: next })
     return next ? "true" : "false"
   }
 
   function setRecordDesktopAudio(value) {
-    var next = value === true || String(value).toLowerCase() === "true"
+    var next = booleanValue(value)
     saveSettings({ recordDesktopAudio: next })
     return next ? "true" : "false"
   }
 
   function setRecordMicrophoneAudio(value) {
-    var next = value === true || String(value).toLowerCase() === "true"
+    var next = booleanValue(value)
     saveSettings({ recordMicrophoneAudio: next })
     return next ? "true" : "false"
   }
 
   function setRecordWebcam(value) {
-    var next = value === true || String(value).toLowerCase() === "true"
+    var next = booleanValue(value)
     saveSettings({ recordWebcam: next })
     return next ? "true" : "false"
   }
+
+  function setRecordKeystrokes(value) {
+    var next = booleanValue(value)
+    saveSettings({ recordKeystrokes: next })
+    if (!next) clearKeystrokeState(false)
+    if (recording) runDetached(["sync-recording-input", next ? "true" : "false"])
+    return next ? "true" : "false"
+  }
+
+  Timer {
+    id: keystrokeClearTimer
+    interval: 2000
+    repeat: false
+    onTriggered: root.keystrokeEntries = []
+  }
+
+  Timer {
+    id: escapeHoldTimer
+    interval: 2000
+    repeat: false
+    onTriggered: {
+      if (!root.escapeHeld || !root.recording || !root.recordKeystrokes) return
+      root.escapeHoldCompleted = true
+      root.stopRecording()
+    }
+  }
+
+  Repeater {
+    model: root.keystrokeCatalog
+
+    Item {
+      id: keystrokeShortcutDelegate
+      required property var modelData
+      visible: false
+
+      GlobalShortcut {
+        appid: root.pluginId
+        name: keystrokeShortcutDelegate.modelData.shortcut
+        description: "Omashot recording key: " + keystrokeShortcutDelegate.modelData.label
+        onPressed: root.keystrokePressed(keystrokeShortcutDelegate.modelData)
+        onReleased: root.keystrokeReleased(keystrokeShortcutDelegate.modelData)
+      }
+    }
+  }
+
+  KeystrokeOverlay {
+    service: root
+  }
+
+  Component.onDestruction: root.runDetached(["cleanup-recording-input"])
 
   Timer {
     interval: 1500
@@ -318,13 +681,7 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        root.lastStatus = String(text || "{}").trim() || "{}"
-        try {
-          var parsed = JSON.parse(root.lastStatus)
-          root.recording = parsed.recording === true
-        } catch (e) {
-          root.recording = false
-        }
+        root.applyRecorderStatus(text)
       }
     }
   }
@@ -431,5 +788,6 @@ Item {
     function desktopAudio(value: string): string { return root.setRecordDesktopAudio(value) }
     function microphoneAudio(value: string): string { return root.setRecordMicrophoneAudio(value) }
     function webcam(value: string): string { return root.setRecordWebcam(value) }
+    function keystrokes(value: string): string { return root.setRecordKeystrokes(value) }
   }
 }
