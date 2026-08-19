@@ -111,7 +111,8 @@ Item {
             Text {
               required property var modelData
 
-              text: String(modelData.text || "")
+              textFormat: Text.RichText
+              text: String(modelData.richText || modelData.text || "")
                 + (Number(modelData.count) > 1 ? " ×" + Number(modelData.count) : "")
               color: Color.background
               font.family: Style.font.menuFamily

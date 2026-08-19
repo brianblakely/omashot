@@ -658,6 +658,14 @@ install_recording_escape_binding() {
       omashot_recording_escape_bind:set_enabled(false)
       omashot_recording_escape_bind = nil
     end
+    if omashot_recording_modifier_tracker then
+      local tracker = omashot_recording_modifier_tracker
+      if tracker.timer then tracker.timer:set_enabled(false) end
+      if tracker.subscription and tracker.subscription:is_active() then
+        tracker.subscription:remove()
+      end
+      omashot_recording_modifier_tracker = nil
+    end
 
     omashot_recording_binding_sets = omashot_recording_binding_sets or {}
     for _, bindings in pairs(omashot_recording_binding_sets) do
@@ -701,6 +709,14 @@ end
 if omashot_recording_escape_bind then
   omashot_recording_escape_bind:set_enabled(false)
   omashot_recording_escape_bind = nil
+end
+if omashot_recording_modifier_tracker then
+  local tracker = omashot_recording_modifier_tracker
+  if tracker.timer then tracker.timer:set_enabled(false) end
+  if tracker.subscription and tracker.subscription:is_active() then
+    tracker.subscription:remove()
+  end
+  omashot_recording_modifier_tracker = nil
 end
 
 local function disable_bindings(bindings)
@@ -767,19 +783,19 @@ local ordinary = {
 }
 
 local modifiers = {
-  { "CONTROL_L", "modifier-ctrl-left" },
-  { "CONTROL_R", "modifier-ctrl-right" },
-  { "SHIFT_L", "modifier-shift-left" },
-  { "SHIFT_R", "modifier-shift-right" },
-  { "ALT_L", "modifier-alt-left" },
-  { "ALT_R", "modifier-alt-right" },
-  { "SUPER_L", "modifier-super-left" },
-  { "SUPER_R", "modifier-super-right" },
+  { "Control_L", "modifier-ctrl-left" },
+  { "Control_R", "modifier-ctrl-right" },
+  { "Shift_L", "modifier-shift-left" },
+  { "Shift_R", "modifier-shift-right" },
+  { "Alt_L", "modifier-alt-left" },
+  { "Alt_R", "modifier-alt-right" },
+  { "Super_L", "modifier-super-left" },
+  { "Super_R", "modifier-super-right" },
 }
 
--- Lua-wrapped dispatchers are not recognized as Hyprland's special global
--- bindings, so they do not get an automatic release event. Pair every press
--- with an explicit release binding to keep Quickshell's state synchronized.
+-- Keep explicit release coverage for every endpoint. Modifier state is also
+-- reconciled against Hyprland's physical-key state below because a
+-- Lua-wrapped global shortcut can otherwise leave modifiers pressed forever.
 local function add_global_binding(bindings, entry, description, repeating, non_consuming)
   local endpoint = "b.omashot:" .. entry[2]
   local press_options = {
@@ -821,6 +837,37 @@ if not bindings_are_live(bindings, expected_binding_count) then
 end
 
 for _, binding in ipairs(bindings) do binding:set_enabled(true) end
+
+-- Raw keyboard events are emitted immediately before Hyprland updates its
+-- pressed-key set. Reconcile one event-loop tick later, then send only physical
+-- modifier state changes over Hyprland's existing custom-event IPC socket.
+if hl.on and hl.timer and hl.is_key_down and hl.dsp and hl.dsp.event then
+  local tracker = { states = {} }
+  for _, entry in ipairs(modifiers) do
+    tracker.states[entry[2]] = false
+    entry[3] = hl.dsp.event("b.omashot-modifier," .. entry[2] .. ",1")
+    entry[4] = hl.dsp.event("b.omashot-modifier," .. entry[2] .. ",0")
+  end
+
+  local function reconcile_modifiers()
+    for _, entry in ipairs(modifiers) do
+      local pressed = hl.is_key_down(entry[1])
+      if tracker.states[entry[2]] ~= pressed then
+        tracker.states[entry[2]] = pressed
+        if pressed then entry[3]() else entry[4]() end
+      end
+    end
+    if tracker.timer then tracker.timer:set_enabled(false) end
+  end
+
+  tracker.timer = hl.timer(reconcile_modifiers, { timeout = 1, type = "repeat" })
+  tracker.timer:set_enabled(false)
+  tracker.subscription = hl.on("input.keyboard.key", function()
+    tracker.timer:set_enabled(true)
+  end)
+  omashot_recording_modifier_tracker = tracker
+  tracker.timer:set_enabled(true)
+end
 LUA
 
   if hyprctl eval "$lua" >/dev/null 2>&1; then
@@ -846,6 +893,14 @@ remove_recording_escape_binding() {
       if omashot_recording_escape_bind then
         omashot_recording_escape_bind:set_enabled(false)
         omashot_recording_escape_bind = nil
+      end
+      if omashot_recording_modifier_tracker then
+        local tracker = omashot_recording_modifier_tracker
+        if tracker.timer then tracker.timer:set_enabled(false) end
+        if tracker.subscription and tracker.subscription:is_active() then
+          tracker.subscription:remove()
+        end
+        omashot_recording_modifier_tracker = nil
       end
       if omashot_recording_binding_sets then
         for _, bindings in pairs(omashot_recording_binding_sets) do

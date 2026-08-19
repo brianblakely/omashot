@@ -113,7 +113,7 @@ assert_absent '"CTRL + CONTROL_L"' "$HELPER" \
   "left Ctrl still uses a self-modifier chord that can lose its release"
 assert_absent '"SHIFT + SHIFT_L"' "$HELPER" \
   "left Shift still uses a self-modifier chord that can lose its release"
-for modifier_key in CONTROL_L CONTROL_R SHIFT_L SHIFT_R ALT_L ALT_R SUPER_L SUPER_R; do
+for modifier_key in Control_L Control_R Shift_L Shift_R Alt_L Alt_R Super_L Super_R; do
   assert_contains "{ \"$modifier_key\", \"modifier-" "$HELPER" \
     "$modifier_key is not bound without a redundant modifier chord"
 done
@@ -137,6 +137,16 @@ assert_contains 'add_global_binding(bindings, entry, "Track modifier in Omashot 
   "$HELPER" "modifier shortcuts are not paired with release bindings"
 assert_contains 'add_global_binding(bindings, { "ESCAPE", "key-escape" },' "$HELPER" \
   "Escape is not paired with a release binding"
+assert_contains 'tracker.subscription = hl.on("input.keyboard.key", function()' "$HELPER" \
+  "physical modifier changes are not observed"
+assert_contains 'local pressed = hl.is_key_down(entry[1])' "$HELPER" \
+  "modifier state is not reconciled with Hyprland's pressed-key set"
+assert_contains 'tracker.timer = hl.timer(reconcile_modifiers, { timeout = 1, type = "repeat" })' \
+  "$HELPER" "modifier reconciliation does not wait for Hyprland's key state update"
+assert_contains 'hl.dsp.event("b.omashot-modifier," .. entry[2] .. ",0")' "$HELPER" \
+  "physical modifier releases are not sent to Quickshell"
+assert_equal "3" "$(rg -c 'if omashot_recording_modifier_tracker then' "$HELPER")" \
+  "modifier tracking is not cleaned during every input-binding transition"
 assert_contains 'omashot_recording_binding_sets = omashot_recording_binding_sets or {}' \
   "$HELPER" \
   "recording binding handles do not have a dedicated table"
@@ -162,10 +172,24 @@ assert_contains 'if (active.ctrl) labels.push("Ctrl")' "$SERVICE" \
   "Ctrl is not composed into shortcut labels"
 assert_contains 'if (active.shift) labels.push("Shift")' "$SERVICE" \
   "Shift is not composed into shortcut labels"
-assert_contains 'var chord = activeModifierGlyphs()' "$SERVICE" \
-  "modifier chords are not rendered with Nerd Font glyphs"
-assert_contains 'appendKeystroke(entry.glyph || entry.label, wasPressed)' "$SERVICE" \
+assert_contains 'var chord = activeModifierDisplays()' "$SERVICE" \
+  "modifier chords are not rendered with their configured icon fonts"
+assert_contains 'appendKeystroke(entry.glyph || entry.label, wasPressed, entry.fontFamily)' "$SERVICE" \
   "non-character keys do not prefer their Nerd Font glyphs"
+assert_contains 'glyph: "\ue900", fontFamily: "omarchy"' "$SERVICE" \
+  "Super does not use the Omarchy U+E900 icon"
+assert_contains 'textFormat: Text.RichText' "$KEYSTROKE_OVERLAY" \
+  "the keystroke row cannot render a font-specific Super glyph"
+assert_contains 'font-family:' "$SERVICE" \
+  "keystroke chords do not retain per-glyph font families"
+assert_contains 'function setPhysicalModifierState(shortcut, pressed)' "$SERVICE" \
+  "physical modifier state updates are not handled"
+assert_contains 'if (pressed === alreadyPressed) return' "$SERVICE" \
+  "duplicate modifier state updates are not idempotent"
+assert_contains 'fields[0] !== "b.omashot-modifier"' "$SERVICE" \
+  "Hyprland modifier events are not namespaced"
+assert_contains 'function onRawEvent(event) { root.handleHyprlandEvent(event) }' "$SERVICE" \
+  "Hyprland modifier events are not routed to the service"
 
 catalog_entry() {
   rg --fixed-strings -- "{ shortcut: \"$1\"," "$SERVICE"
@@ -175,7 +199,7 @@ assert_catalog_glyph() {
   local shortcut="$1" glyph="$2" entry
   entry=$(catalog_entry "$shortcut")
   [[ $entry == *"glyph: \"$glyph\""* ]] ||
-    fail "$shortcut does not use the expected Nerd Font glyph"
+    fail "$shortcut does not use the expected configured glyph"
 }
 
 while read -r shortcut glyph; do
@@ -219,8 +243,8 @@ modifier-shift-left 󰘶
 modifier-shift-right 󰘶
 modifier-alt-left 󰘵
 modifier-alt-right 󰘵
-modifier-super-left 󰘳
-modifier-super-right 󰘳
+modifier-super-left \ue900
+modifier-super-right \ue900
 GLYPHS
 
 for shortcut in key-a key-0 key-slash key-kp-0 key-kp-add; do

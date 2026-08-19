@@ -149,8 +149,8 @@ Item {
     { shortcut: "modifier-shift-right", label: "Shift", glyph: "󰘶", kind: "modifier", modifier: "shift" },
     { shortcut: "modifier-alt-left", label: "Alt", glyph: "󰘵", kind: "modifier", modifier: "alt" },
     { shortcut: "modifier-alt-right", label: "Alt", glyph: "󰘵", kind: "modifier", modifier: "alt" },
-    { shortcut: "modifier-super-left", label: "Super", glyph: "󰘳", kind: "modifier", modifier: "super" },
-    { shortcut: "modifier-super-right", label: "Super", glyph: "󰘳", kind: "modifier", modifier: "super" }
+    { shortcut: "modifier-super-left", label: "Super", glyph: "\ue900", fontFamily: "omarchy", kind: "modifier", modifier: "super" },
+    { shortcut: "modifier-super-right", label: "Super", glyph: "\ue900", fontFamily: "omarchy", kind: "modifier", modifier: "super" }
   ]
 
   signal recordingPresentationRequested()
@@ -268,39 +268,67 @@ Item {
     return dispatch.join(" + ")
   }
 
-  function modifierGlyph(name) {
+  function modifierDisplay(name) {
     var requested = String(name || "").toLowerCase()
     for (var i = 0; i < keystrokeCatalog.length; i++) {
       var entry = keystrokeCatalog[i]
       if (String(entry.modifier || "") === requested && entry.glyph)
-        return String(entry.glyph)
+        return {
+          text: String(entry.glyph),
+          fontFamily: String(entry.fontFamily || "")
+        }
     }
-    return String(name || "")
+    return { text: String(name || ""), fontFamily: "" }
   }
 
-  function activeModifierGlyphs() {
+  function activeModifierDisplays() {
     var names = activeModifierNames()
-    var glyphs = []
-    for (var i = 0; i < names.length; i++) glyphs.push(modifierGlyph(names[i]))
-    return glyphs
+    var displays = []
+    for (var i = 0; i < names.length; i++) displays.push(modifierDisplay(names[i]))
+    return displays
   }
 
-  function appendKeystroke(label, repeated) {
+  function richTextEscape(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;")
+  }
+
+  function displayRichText(display) {
+    var escapedText = richTextEscape(display && display.text)
+    var family = String(display && display.fontFamily || "")
+    if (family === "") return escapedText
+    return "<span style=\"font-family: '" + richTextEscape(family)
+      + "';\">" + escapedText + "</span>"
+  }
+
+  function appendKeystroke(label, repeated, fontFamily) {
     var now = Date.now()
     var entries = keystrokeEntries.slice(0)
     if (lastKeystrokeAt <= 0 || now - lastKeystrokeAt > 500) entries = []
 
-    var chord = activeModifierGlyphs()
-    chord.push(String(label || ""))
-    var text = chord.join(" + ")
+    var chord = activeModifierDisplays()
+    chord.push({ text: String(label || ""), fontFamily: String(fontFamily || "") })
+    var labels = []
+    var richTextParts = []
+    for (var i = 0; i < chord.length; i++) {
+      labels.push(String(chord[i].text || ""))
+      richTextParts.push(displayRichText(chord[i]))
+    }
+    var text = labels.join(" + ")
+    var richText = richTextParts.join(" + ")
     var last = entries.length > 0 ? entries[entries.length - 1] : null
     if (repeated === true && last && String(last.text || "") === text) {
       entries[entries.length - 1] = {
         text: text,
+        richText: richText,
         count: Math.max(1, Number(last.count) || 1) + 1
       }
     } else {
-      entries.push({ text: text, count: 1 })
+      entries.push({ text: text, richText: richText, count: 1 })
     }
 
     // Width trimming is authoritative, but this also bounds retained state if
@@ -360,7 +388,7 @@ Item {
     for (var key in pressedKeystrokes) pressed[key] = pressedKeystrokes[key]
     pressed[shortcut] = true
     pressedKeystrokes = pressed
-    appendKeystroke(entry.glyph || entry.label, wasPressed)
+    appendKeystroke(entry.glyph || entry.label, wasPressed, entry.fontFamily)
 
     if (String(entry.kind || "") === "escape") beginEscapeHold()
   }
@@ -384,6 +412,30 @@ Item {
     }
     pressedKeystrokes = pressed
     if (String(entry.kind || "") === "escape") endEscapeHold()
+  }
+
+  function setPhysicalModifierState(shortcut, pressed) {
+    var requested = String(shortcut || "")
+    for (var i = 0; i < keystrokeCatalog.length; i++) {
+      var entry = keystrokeCatalog[i]
+      if (String(entry.kind || "") !== "modifier"
+          || String(entry.shortcut || "") !== requested) continue
+
+      var alreadyPressed = pressedModifiers[requested] !== undefined
+      if (pressed === alreadyPressed) return
+      if (pressed === true) keystrokePressed(entry)
+      else keystrokeReleased(entry)
+      return
+    }
+  }
+
+  function handleHyprlandEvent(event) {
+    if (String(event && event.name ? event.name : "") !== "custom") return
+
+    var fields = String(event && event.data ? event.data : "").split(",")
+    if (fields.length !== 3 || fields[0] !== "b.omashot-modifier") return
+    if (fields[2] !== "0" && fields[2] !== "1") return
+    setPhysicalModifierState(fields[1], fields[2] === "1")
   }
 
   function clearKeystrokeState(clearTarget) {
@@ -647,6 +699,11 @@ Item {
       root.escapeHoldCompleted = true
       root.stopRecording()
     }
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) { root.handleHyprlandEvent(event) }
   }
 
   Repeater {
