@@ -145,8 +145,69 @@ assert_contains 'tracker.timer = hl.timer(reconcile_modifiers, { timeout = 1, ty
   "$HELPER" "modifier reconciliation does not wait for Hyprland's key state update"
 assert_contains 'hl.dsp.event("b.omashot-modifier," .. entry[2] .. ",0")' "$HELPER" \
   "physical modifier releases are not sent to Quickshell"
+assert_contains 'if pressed then hl.dispatch(entry[3]) else hl.dispatch(entry[4]) end' "$HELPER" \
+  "modifier state events are not executed through Hyprland's dispatcher API"
+assert_absent 'if pressed then entry[3]() else entry[4]() end' "$HELPER" \
+  "modifier state events still call dispatcher objects directly"
 assert_equal "3" "$(rg -c 'if omashot_recording_modifier_tracker then' "$HELPER")" \
   "modifier tracking is not cleaned during every input-binding transition"
+
+# Execute the embedded tracker against dispatcher objects that intentionally
+# cannot be called. Hyprland requires hl.dispatch(object); calling an object
+# directly raises the full-screen Lua error this regression test guards.
+modifier_lua_test="$TEST_ROOT/modifier-dispatch.lua"
+cat >"$modifier_lua_test" <<'LUA_TEST'
+local physicalKeys = {}
+local dispatched = {}
+local rawEventCallback = nil
+local timerCallback = nil
+
+local keybindMethods = {}
+function keybindMethods:set_enabled(value) self.enabled = value end
+function keybindMethods:is_enabled() return self.enabled end
+
+hl = { dsp = {} }
+function hl.dsp.global(value) return { kind = "global", value = value } end
+function hl.dsp.event(value) return { kind = "event", value = value } end
+function hl.bind()
+  return setmetatable({ enabled = true }, { __index = keybindMethods })
+end
+function hl.dispatch(dispatcher)
+  assert(type(dispatcher) == "table" and dispatcher.kind == "event")
+  table.insert(dispatched, dispatcher.value)
+end
+function hl.is_key_down(key) return physicalKeys[key] == true end
+function hl.timer(callback, options)
+  assert(options.timeout == 1 and options.type == "repeat")
+  timerCallback = callback
+  local timer = { enabled = true }
+  function timer:set_enabled(value) self.enabled = value end
+  return timer
+end
+function hl.on(name, callback)
+  assert(name == "input.keyboard.key")
+  rawEventCallback = callback
+  local subscription = { active = true }
+  function subscription:is_active() return self.active end
+  function subscription:remove() self.active = false end
+  return subscription
+end
+LUA_TEST
+sed -n '/^if omashot_recording_keybinds then$/,/^LUA$/p' "$HELPER" \
+  | sed '$d' >>"$modifier_lua_test"
+cat >>"$modifier_lua_test" <<'LUA_TEST'
+assert(rawEventCallback and timerCallback)
+physicalKeys.Super_L = true
+rawEventCallback()
+timerCallback()
+assert(dispatched[#dispatched] == "b.omashot-modifier,modifier-super-left,1")
+physicalKeys.Super_L = false
+rawEventCallback()
+timerCallback()
+assert(dispatched[#dispatched] == "b.omashot-modifier,modifier-super-left,0")
+LUA_TEST
+lua "$modifier_lua_test" || fail "modifier tracking raises a Hyprland Lua runtime error"
+
 assert_contains 'omashot_recording_binding_sets = omashot_recording_binding_sets or {}' \
   "$HELPER" \
   "recording binding handles do not have a dedicated table"
@@ -178,10 +239,16 @@ assert_contains 'appendKeystroke(entry.glyph || entry.label, wasPressed, entry.f
   "non-character keys do not prefer their Nerd Font glyphs"
 assert_contains 'glyph: "\ue900", fontFamily: "omarchy"' "$SERVICE" \
   "Super does not use the Omarchy U+E900 icon"
-assert_contains 'textFormat: Text.RichText' "$KEYSTROKE_OVERLAY" \
-  "the keystroke row cannot render a font-specific Super glyph"
-assert_contains 'font-family:' "$SERVICE" \
+assert_contains 'parts: displayParts' "$SERVICE" \
   "keystroke chords do not retain per-glyph font families"
+assert_contains 'import QtQuick.Layouts' "$KEYSTROKE_OVERLAY" \
+  "the keystroke row cannot independently align mixed-font glyphs"
+assert_contains 'Layout.alignment: Qt.AlignVCenter' "$KEYSTROKE_OVERLAY" \
+  "mixed-font keystroke runs are not vertically centered"
+assert_contains 'font.family: requestedFontFamily !== ""' "$KEYSTROKE_OVERLAY" \
+  "the Super glyph does not select its configured font family"
+assert_absent 'textFormat: Text.RichText' "$KEYSTROKE_OVERLAY" \
+  "the Super glyph is still baseline-locked inside rich text"
 assert_contains 'function setPhysicalModifierState(shortcut, pressed)' "$SERVICE" \
   "physical modifier state updates are not handled"
 assert_contains 'if (pressed === alreadyPressed) return' "$SERVICE" \

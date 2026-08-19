@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import qs.Commons
@@ -97,7 +98,7 @@ Item {
           }
         }
 
-        Row {
+        RowLayout {
           id: keyRow
 
           anchors.left: parent.left
@@ -108,16 +109,45 @@ Item {
           Repeater {
             model: service ? service.keystrokeEntries : []
 
-            Text {
+            RowLayout {
+              id: keystrokeEntry
+
               required property var modelData
 
-              textFormat: Text.RichText
-              text: String(modelData.richText || modelData.text || "")
-                + (Number(modelData.count) > 1 ? " ×" + Number(modelData.count) : "")
-              color: Color.background
-              font.family: Style.font.menuFamily
-              font.pixelSize: Style.font.body * 3
-              font.weight: Font.DemiBold
+              Layout.alignment: Qt.AlignVCenter
+              spacing: 0
+
+              Repeater {
+                model: Array.isArray(keystrokeEntry.modelData.parts)
+                  ? keystrokeEntry.modelData.parts
+                  : [{ text: String(keystrokeEntry.modelData.text || ""), fontFamily: "" }]
+
+                Text {
+                  id: keystrokePart
+
+                  required property var modelData
+                  readonly property string requestedFontFamily: String(modelData.fontFamily || "")
+
+                  Layout.alignment: Qt.AlignVCenter
+                  text: String(modelData.text || "")
+                  color: Color.background
+                  font.family: requestedFontFamily !== ""
+                    ? requestedFontFamily : Style.font.menuFamily
+                  font.pixelSize: Style.font.body * 3
+                  font.weight: requestedFontFamily !== "" ? Font.Normal : Font.DemiBold
+                  renderType: requestedFontFamily !== "" ? Text.NativeRendering : Text.QtRendering
+                }
+              }
+
+              Text {
+                Layout.alignment: Qt.AlignVCenter
+                visible: Number(keystrokeEntry.modelData.count) > 1
+                text: " ×" + Number(keystrokeEntry.modelData.count)
+                color: Color.background
+                font.family: Style.font.menuFamily
+                font.pixelSize: Style.font.body * 3
+                font.weight: Font.DemiBold
+              }
             }
           }
         }

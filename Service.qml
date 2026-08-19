@@ -288,23 +288,6 @@ Item {
     return displays
   }
 
-  function richTextEscape(value) {
-    return String(value || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/\"/g, "&quot;")
-      .replace(/'/g, "&#39;")
-  }
-
-  function displayRichText(display) {
-    var escapedText = richTextEscape(display && display.text)
-    var family = String(display && display.fontFamily || "")
-    if (family === "") return escapedText
-    return "<span style=\"font-family: '" + richTextEscape(family)
-      + "';\">" + escapedText + "</span>"
-  }
-
   function appendKeystroke(label, repeated, fontFamily) {
     var now = Date.now()
     var entries = keystrokeEntries.slice(0)
@@ -313,22 +296,25 @@ Item {
     var chord = activeModifierDisplays()
     chord.push({ text: String(label || ""), fontFamily: String(fontFamily || "") })
     var labels = []
-    var richTextParts = []
+    var displayParts = []
     for (var i = 0; i < chord.length; i++) {
+      if (i > 0) displayParts.push({ text: " + ", fontFamily: "" })
       labels.push(String(chord[i].text || ""))
-      richTextParts.push(displayRichText(chord[i]))
+      displayParts.push({
+        text: String(chord[i].text || ""),
+        fontFamily: String(chord[i].fontFamily || "")
+      })
     }
     var text = labels.join(" + ")
-    var richText = richTextParts.join(" + ")
     var last = entries.length > 0 ? entries[entries.length - 1] : null
     if (repeated === true && last && String(last.text || "") === text) {
       entries[entries.length - 1] = {
         text: text,
-        richText: richText,
+        parts: displayParts,
         count: Math.max(1, Number(last.count) || 1) + 1
       }
     } else {
-      entries.push({ text: text, richText: richText, count: 1 })
+      entries.push({ text: text, parts: displayParts, count: 1 })
     }
 
     // Width trimming is authoritative, but this also bounds retained state if
