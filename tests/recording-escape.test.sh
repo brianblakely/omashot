@@ -74,10 +74,13 @@ grep -Fq 'omarchy-shell b.omashot stopRecording' "$HYPRCTL_LOG" ||
 [[ -e $STATE_ROOT/omashot/recording-escape-bound ]] ||
   fail "the active Escape binding was not tracked"
 
+: >"$HYPRCTL_LOG"
 run_omashot stop-recording
 
-grep -Fq 'omashot_recording_escape_bind:unbind()' "$HYPRCTL_LOG" ||
-  fail "stopping a recording did not remove the Escape binding"
+grep -Fq 'binding:set_enabled(false)' "$HYPRCTL_LOG" ||
+  fail "stopping a recording did not disable the Escape binding"
+grep -Fq 'omashot_recording_binding_sets' "$HYPRCTL_LOG" ||
+  fail "stopping a recording did not target Omashot's binding handles"
 [[ ! -e $STATE_ROOT/omashot/recording-escape-bound ]] ||
   fail "the Escape binding marker remained after stopping"
 

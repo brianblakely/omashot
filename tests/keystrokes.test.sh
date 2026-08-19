@@ -109,16 +109,41 @@ for shortcut in key-a key-slash key-page-up key-left key-f12 key-kp-enter \
     fail "supported shortcut $shortcut is missing"
 done
 
-ordinary_bindings=$(sed -n '/for _, entry in ipairs(ordinary) do/,/^end$/p' "$HELPER")
+assert_absent '"CTRL + CONTROL_L"' "$HELPER" \
+  "left Ctrl still uses a self-modifier chord that can lose its release"
+assert_absent '"SHIFT + SHIFT_L"' "$HELPER" \
+  "left Shift still uses a self-modifier chord that can lose its release"
+for modifier_key in CONTROL_L CONTROL_R SHIFT_L SHIFT_R ALT_L ALT_R SUPER_L SUPER_R; do
+  assert_contains "{ \"$modifier_key\", \"modifier-" "$HELPER" \
+    "$modifier_key is not bound without a redundant modifier chord"
+done
+assert_contains 'onReleased: root.keystrokeReleased(keystrokeShortcutDelegate.modelData)' \
+  "$SERVICE" "global shortcut releases are not routed to the keystroke service"
+
+global_binding_helper=$(sed -n '/^local function add_global_binding/,/^end$/p' "$HELPER")
 for option in 'non_consuming = true' 'ignore_mods = true' 'repeating = true' \
   'locked = false' 'dont_inhibit = false' 'allow_input_capture = false'; do
-  rg --fixed-strings --quiet -- "$option" <<<"$ordinary_bindings" ||
+  rg --fixed-strings --quiet -- "$option" <<<"$global_binding_helper" ||
     fail "ordinary recording bindings omit $option"
 done
-assert_contains 'omashot_recording_keybinds = {}' "$HELPER" \
+assert_contains 'release = true' "$HELPER" \
+  "recording shortcuts have no explicit release binding"
+assert_equal "2" \
+  "$(rg -c 'table\.insert\(bindings, hl\.bind' <<<"$global_binding_helper")" \
+  "recording shortcuts are not created as press/release pairs"
+assert_contains 'expected_binding_count = (#ordinary + #modifiers + 1) * 2' "$HELPER" \
+  "the cached binding set does not validate every press/release pair"
+assert_contains 'add_global_binding(bindings, entry, "Track modifier in Omashot recording", false, true)' \
+  "$HELPER" "modifier shortcuts are not paired with release bindings"
+assert_contains 'add_global_binding(bindings, { "ESCAPE", "key-escape" },' "$HELPER" \
+  "Escape is not paired with a release binding"
+assert_contains 'omashot_recording_binding_sets = omashot_recording_binding_sets or {}' \
+  "$HELPER" \
   "recording binding handles do not have a dedicated table"
-assert_contains 'for _, binding in ipairs(omashot_recording_keybinds) do binding:unbind() end' \
-  "$HELPER" "recording bindings are not removed through their own handles"
+assert_contains 'for _, binding in ipairs(bindings) do binding:set_enabled(false) end' \
+  "$HELPER" "recording bindings are not disabled through their own handles"
+assert_absent 'binding:unbind()' "$HELPER" \
+  "recording cleanup uses Hyprland's broad Lua unbind operation"
 assert_absent 'hl.unbind' "$HELPER" \
   "recording cleanup can remove unrelated user bindings"
 assert_absent 'showmethekey' "$PLUGIN_DIR/README.md" \
@@ -137,8 +162,74 @@ assert_contains 'if (active.ctrl) labels.push("Ctrl")' "$SERVICE" \
   "Ctrl is not composed into shortcut labels"
 assert_contains 'if (active.shift) labels.push("Shift")' "$SERVICE" \
   "Shift is not composed into shortcut labels"
-assert_contains '{ shortcut: "key-page-up", label: "Page Up" }' "$SERVICE" \
-  "special key labels are missing"
+assert_contains 'var chord = activeModifierGlyphs()' "$SERVICE" \
+  "modifier chords are not rendered with Nerd Font glyphs"
+assert_contains 'appendKeystroke(entry.glyph || entry.label, wasPressed)' "$SERVICE" \
+  "non-character keys do not prefer their Nerd Font glyphs"
+
+catalog_entry() {
+  rg --fixed-strings -- "{ shortcut: \"$1\"," "$SERVICE"
+}
+
+assert_catalog_glyph() {
+  local shortcut="$1" glyph="$2" entry
+  entry=$(catalog_entry "$shortcut")
+  [[ $entry == *"glyph: \"$glyph\""* ]] ||
+    fail "$shortcut does not use the expected Nerd Font glyph"
+}
+
+while read -r shortcut glyph; do
+  assert_catalog_glyph "$shortcut" "$glyph"
+done <<'GLYPHS'
+key-space 󱁐
+key-tab 󰌒
+key-enter 󰌑
+key-backspace 󰌍
+key-insert 
+key-delete 󰆴
+key-home 󰋜
+key-end 󰘁
+key-page-up 󰞕
+key-page-down 󰞒
+key-left 󰁍
+key-right 󰁔
+key-up 󰁝
+key-down 󰁅
+key-caps-lock 󰘲
+key-num-lock 󰎠
+key-print 󰐪
+key-pause 󰏤
+key-f1 󱊫
+key-f2 󱊬
+key-f3 󱊭
+key-f4 󱊮
+key-f5 󱊯
+key-f6 󱊰
+key-f7 󱊱
+key-f8 󱊲
+key-f9 󱊳
+key-f10 󱊴
+key-f11 󱊵
+key-f12 󱊶
+key-kp-enter 󰌑
+key-escape 󱊷
+modifier-ctrl-left 󰘴
+modifier-ctrl-right 󰘴
+modifier-shift-left 󰘶
+modifier-shift-right 󰘶
+modifier-alt-left 󰘵
+modifier-alt-right 󰘵
+modifier-super-left 󰘳
+modifier-super-right 󰘳
+GLYPHS
+
+for shortcut in key-a key-0 key-slash key-kp-0 key-kp-add; do
+  [[ $(catalog_entry "$shortcut") != *'glyph:'* ]] ||
+    fail "$shortcut should remain a printable character label"
+done
+
+assert_contains '{ shortcut: "key-page-up", label: "Page Up", glyph: "󰞕" }' \
+  "$SERVICE" "human-readable special-key labels are missing"
 assert_contains 'id: keystrokeClearTimer' "$SERVICE" \
   "the keystroke clear timer is missing"
 assert_contains 'interval: 2000' "$SERVICE" \
@@ -170,6 +261,8 @@ assert_contains 'color: Color.foreground' "$KEYSTROKE_OVERLAY" \
   "the key row does not use the inverse theme background"
 assert_contains 'color: Color.background' "$KEYSTROKE_OVERLAY" \
   "the key row does not use the inverse theme text color"
+assert_contains 'font.pixelSize: Style.font.body * 3' "$KEYSTROKE_OVERLAY" \
+  "the key row font is not three times the standard body size"
 assert_absent 'Behavior on opacity' "$KEYSTROKE_OVERLAY" \
   "the key row fades instead of clearing abruptly"
 
@@ -239,7 +332,7 @@ assert_equal "DP-1" \
   "screen recording monitor metadata was not retained"
 
 for source_fragment in '"key-a"' '"key-page-up"' '"key-f12"' \
-  '"modifier-ctrl-left"' 'hl.dsp.global("b.omashot:key-escape")'; do
+  '"modifier-ctrl-left"' '{ "ESCAPE", "key-escape" }' 'release = true'; do
   assert_contains "$source_fragment" "$HYPRCTL_LOG" \
     "the installed dynamic bindings omit $source_fragment"
 done

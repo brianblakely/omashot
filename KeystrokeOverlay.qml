@@ -115,7 +115,7 @@ Item {
                 + (Number(modelData.count) > 1 ? " ×" + Number(modelData.count) : "")
               color: Color.background
               font.family: Style.font.menuFamily
-              font.pixelSize: Style.font.body
+              font.pixelSize: Style.font.body * 3
               font.weight: Font.DemiBold
             }
           }

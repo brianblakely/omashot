@@ -637,21 +637,47 @@ install_recording_escape_binding() {
 
   local lua
   lua='
+    local function disable_bindings(bindings)
+      if not bindings then return end
+      for _, binding in ipairs(bindings) do binding:set_enabled(false) end
+    end
+
+    local function bindings_are_live(bindings, expected_count)
+      if not bindings or #bindings ~= expected_count then return false end
+      for _, binding in ipairs(bindings) do
+        if binding:is_enabled() == nil then return false end
+      end
+      return true
+    end
+
     if omashot_recording_keybinds then
-      for _, binding in ipairs(omashot_recording_keybinds) do binding:unbind() end
+      disable_bindings(omashot_recording_keybinds)
+      omashot_recording_keybinds = nil
     end
     if omashot_recording_escape_bind then
-      omashot_recording_escape_bind:unbind()
+      omashot_recording_escape_bind:set_enabled(false)
       omashot_recording_escape_bind = nil
     end
-    omashot_recording_keybinds = {
-      (hl.bind("ESCAPE", hl.dsp.exec_cmd("omarchy-shell b.omashot stopRecording"), {
-        description = "Stop Omashot recording",
-        locked = false,
-        dont_inhibit = false,
-        allow_input_capture = false,
-      }))
-    }
+
+    omashot_recording_binding_sets = omashot_recording_binding_sets or {}
+    for _, bindings in pairs(omashot_recording_binding_sets) do
+      disable_bindings(bindings)
+    end
+
+    local bindings = omashot_recording_binding_sets.immediate
+    if not bindings_are_live(bindings, 1) then
+      bindings = {}
+      omashot_recording_binding_sets.immediate = bindings
+      table.insert(bindings,
+        hl.bind("ESCAPE", hl.dsp.exec_cmd("omarchy-shell b.omashot stopRecording"), {
+          description = "Stop Omashot recording",
+          locked = false,
+          dont_inhibit = false,
+          allow_input_capture = false,
+        }))
+    end
+
+    for _, binding in ipairs(bindings) do binding:set_enabled(true) end
   '
   if hyprctl eval "$lua" >/dev/null 2>&1; then
     printf 'immediate\n' >"$RECORDING_ESCAPE_MARKER"
@@ -669,14 +695,31 @@ install_recording_keystroke_bindings() {
   local lua
   read -r -d '' lua <<'LUA' || true
 if omashot_recording_keybinds then
-  for _, binding in ipairs(omashot_recording_keybinds) do binding:unbind() end
+  for _, binding in ipairs(omashot_recording_keybinds) do binding:set_enabled(false) end
+  omashot_recording_keybinds = nil
 end
 if omashot_recording_escape_bind then
-  omashot_recording_escape_bind:unbind()
+  omashot_recording_escape_bind:set_enabled(false)
   omashot_recording_escape_bind = nil
 end
 
-omashot_recording_keybinds = {}
+local function disable_bindings(bindings)
+  if not bindings then return end
+  for _, binding in ipairs(bindings) do binding:set_enabled(false) end
+end
+
+local function bindings_are_live(bindings, expected_count)
+  if not bindings or #bindings ~= expected_count then return false end
+  for _, binding in ipairs(bindings) do
+    if binding:is_enabled() == nil then return false end
+  end
+  return true
+end
+
+omashot_recording_binding_sets = omashot_recording_binding_sets or {}
+for _, bindings in pairs(omashot_recording_binding_sets) do
+  disable_bindings(bindings)
+end
 
 local ordinary = {
   { "A", "key-a" }, { "B", "key-b" }, { "C", "key-c" },
@@ -724,49 +767,60 @@ local ordinary = {
 }
 
 local modifiers = {
-  { "CTRL + CONTROL_L", "modifier-ctrl-left" },
-  { "CTRL + CONTROL_R", "modifier-ctrl-right" },
-  { "SHIFT + SHIFT_L", "modifier-shift-left" },
-  { "SHIFT + SHIFT_R", "modifier-shift-right" },
-  { "ALT + ALT_L", "modifier-alt-left" },
-  { "ALT + ALT_R", "modifier-alt-right" },
-  { "SUPER + SUPER_L", "modifier-super-left" },
-  { "SUPER + SUPER_R", "modifier-super-right" },
+  { "CONTROL_L", "modifier-ctrl-left" },
+  { "CONTROL_R", "modifier-ctrl-right" },
+  { "SHIFT_L", "modifier-shift-left" },
+  { "SHIFT_R", "modifier-shift-right" },
+  { "ALT_L", "modifier-alt-left" },
+  { "ALT_R", "modifier-alt-right" },
+  { "SUPER_L", "modifier-super-left" },
+  { "SUPER_R", "modifier-super-right" },
 }
 
-for _, entry in ipairs(ordinary) do
-  local binding = hl.bind(entry[1], hl.dsp.global("b.omashot:" .. entry[2]), {
-    description = "Show key in Omashot recording",
-    non_consuming = true,
-    ignore_mods = true,
-    repeating = true,
-    locked = false,
-    dont_inhibit = false,
-    allow_input_capture = false,
-  })
-  table.insert(omashot_recording_keybinds, binding)
-end
-
-for _, entry in ipairs(modifiers) do
-  local binding = hl.bind(entry[1], hl.dsp.global("b.omashot:" .. entry[2]), {
-    description = "Track modifier in Omashot recording",
+-- Lua-wrapped dispatchers are not recognized as Hyprland's special global
+-- bindings, so they do not get an automatic release event. Pair every press
+-- with an explicit release binding to keep Quickshell's state synchronized.
+local function add_global_binding(bindings, entry, description, repeating, non_consuming)
+  local endpoint = "b.omashot:" .. entry[2]
+  local press_options = {
+    description = description,
     non_consuming = true,
     ignore_mods = true,
     locked = false,
     dont_inhibit = false,
     allow_input_capture = false,
-  })
-  table.insert(omashot_recording_keybinds, binding)
+  }
+  if repeating then press_options.repeating = true end
+  if not non_consuming then press_options.non_consuming = false end
+
+  table.insert(bindings, hl.bind(entry[1], hl.dsp.global(endpoint), press_options))
+  table.insert(bindings, hl.bind(entry[1], hl.dsp.global(endpoint), {
+    description = "Release " .. description,
+    non_consuming = true,
+    ignore_mods = true,
+    release = true,
+    locked = false,
+    dont_inhibit = false,
+    allow_input_capture = false,
+  }))
 end
 
-local escape_binding = hl.bind("ESCAPE", hl.dsp.global("b.omashot:key-escape"), {
-  description = "Hold Escape to stop Omashot recording",
-  ignore_mods = true,
-  locked = false,
-  dont_inhibit = false,
-  allow_input_capture = false,
-})
-table.insert(omashot_recording_keybinds, escape_binding)
+local bindings = omashot_recording_binding_sets.keystrokes
+local expected_binding_count = (#ordinary + #modifiers + 1) * 2
+if not bindings_are_live(bindings, expected_binding_count) then
+  bindings = {}
+  omashot_recording_binding_sets.keystrokes = bindings
+  for _, entry in ipairs(ordinary) do
+    add_global_binding(bindings, entry, "Show key in Omashot recording", true, true)
+  end
+  for _, entry in ipairs(modifiers) do
+    add_global_binding(bindings, entry, "Track modifier in Omashot recording", false, true)
+  end
+  add_global_binding(bindings, { "ESCAPE", "key-escape" },
+    "Hold Escape to stop Omashot recording", false, false)
+end
+
+for _, binding in ipairs(bindings) do binding:set_enabled(true) end
 LUA
 
   if hyprctl eval "$lua" >/dev/null 2>&1; then
@@ -783,13 +837,20 @@ remove_recording_escape_binding() {
 
   if command -v hyprctl >/dev/null 2>&1; then
     hyprctl eval '
+      -- Lua handle unbinds match by key and modifier rather than by identity.
+      -- Disable our retained handles so unrelated user bindings stay intact.
       if omashot_recording_keybinds then
-        for _, binding in ipairs(omashot_recording_keybinds) do binding:unbind() end
+        for _, binding in ipairs(omashot_recording_keybinds) do binding:set_enabled(false) end
         omashot_recording_keybinds = nil
       end
       if omashot_recording_escape_bind then
-        omashot_recording_escape_bind:unbind()
+        omashot_recording_escape_bind:set_enabled(false)
         omashot_recording_escape_bind = nil
+      end
+      if omashot_recording_binding_sets then
+        for _, bindings in pairs(omashot_recording_binding_sets) do
+          for _, binding in ipairs(bindings) do binding:set_enabled(false) end
+        end
       end
     ' >/dev/null 2>&1 || return 0
   fi

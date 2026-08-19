@@ -84,7 +84,7 @@ Item {
     { shortcut: "key-7", label: "7" },
     { shortcut: "key-8", label: "8" },
     { shortcut: "key-9", label: "9" },
-    { shortcut: "key-space", label: "Space" },
+    { shortcut: "key-space", label: "Space", glyph: "󱁐" },
     { shortcut: "key-grave", label: "`" },
     { shortcut: "key-minus", label: "-" },
     { shortcut: "key-equal", label: "=" },
@@ -96,35 +96,35 @@ Item {
     { shortcut: "key-comma", label: "," },
     { shortcut: "key-period", label: "." },
     { shortcut: "key-slash", label: "/" },
-    { shortcut: "key-tab", label: "Tab" },
-    { shortcut: "key-enter", label: "Enter" },
-    { shortcut: "key-backspace", label: "Backspace" },
-    { shortcut: "key-insert", label: "Insert" },
-    { shortcut: "key-delete", label: "Delete" },
-    { shortcut: "key-home", label: "Home" },
-    { shortcut: "key-end", label: "End" },
-    { shortcut: "key-page-up", label: "Page Up" },
-    { shortcut: "key-page-down", label: "Page Down" },
-    { shortcut: "key-left", label: "Left" },
-    { shortcut: "key-right", label: "Right" },
-    { shortcut: "key-up", label: "Up" },
-    { shortcut: "key-down", label: "Down" },
-    { shortcut: "key-caps-lock", label: "Caps Lock" },
-    { shortcut: "key-num-lock", label: "Num Lock" },
-    { shortcut: "key-print", label: "Print Screen" },
-    { shortcut: "key-pause", label: "Pause" },
-    { shortcut: "key-f1", label: "F1" },
-    { shortcut: "key-f2", label: "F2" },
-    { shortcut: "key-f3", label: "F3" },
-    { shortcut: "key-f4", label: "F4" },
-    { shortcut: "key-f5", label: "F5" },
-    { shortcut: "key-f6", label: "F6" },
-    { shortcut: "key-f7", label: "F7" },
-    { shortcut: "key-f8", label: "F8" },
-    { shortcut: "key-f9", label: "F9" },
-    { shortcut: "key-f10", label: "F10" },
-    { shortcut: "key-f11", label: "F11" },
-    { shortcut: "key-f12", label: "F12" },
+    { shortcut: "key-tab", label: "Tab", glyph: "󰌒" },
+    { shortcut: "key-enter", label: "Enter", glyph: "󰌑" },
+    { shortcut: "key-backspace", label: "Backspace", glyph: "󰌍" },
+    { shortcut: "key-insert", label: "Insert", glyph: "" },
+    { shortcut: "key-delete", label: "Delete", glyph: "󰆴" },
+    { shortcut: "key-home", label: "Home", glyph: "󰋜" },
+    { shortcut: "key-end", label: "End", glyph: "󰘁" },
+    { shortcut: "key-page-up", label: "Page Up", glyph: "󰞕" },
+    { shortcut: "key-page-down", label: "Page Down", glyph: "󰞒" },
+    { shortcut: "key-left", label: "Left", glyph: "󰁍" },
+    { shortcut: "key-right", label: "Right", glyph: "󰁔" },
+    { shortcut: "key-up", label: "Up", glyph: "󰁝" },
+    { shortcut: "key-down", label: "Down", glyph: "󰁅" },
+    { shortcut: "key-caps-lock", label: "Caps Lock", glyph: "󰘲" },
+    { shortcut: "key-num-lock", label: "Num Lock", glyph: "󰎠" },
+    { shortcut: "key-print", label: "Print Screen", glyph: "󰐪" },
+    { shortcut: "key-pause", label: "Pause", glyph: "󰏤" },
+    { shortcut: "key-f1", label: "F1", glyph: "󱊫" },
+    { shortcut: "key-f2", label: "F2", glyph: "󱊬" },
+    { shortcut: "key-f3", label: "F3", glyph: "󱊭" },
+    { shortcut: "key-f4", label: "F4", glyph: "󱊮" },
+    { shortcut: "key-f5", label: "F5", glyph: "󱊯" },
+    { shortcut: "key-f6", label: "F6", glyph: "󱊰" },
+    { shortcut: "key-f7", label: "F7", glyph: "󱊱" },
+    { shortcut: "key-f8", label: "F8", glyph: "󱊲" },
+    { shortcut: "key-f9", label: "F9", glyph: "󱊳" },
+    { shortcut: "key-f10", label: "F10", glyph: "󱊴" },
+    { shortcut: "key-f11", label: "F11", glyph: "󱊵" },
+    { shortcut: "key-f12", label: "F12", glyph: "󱊶" },
     { shortcut: "key-kp-0", label: "Num 0" },
     { shortcut: "key-kp-1", label: "Num 1" },
     { shortcut: "key-kp-2", label: "Num 2" },
@@ -140,17 +140,17 @@ Item {
     { shortcut: "key-kp-multiply", label: "Num *" },
     { shortcut: "key-kp-subtract", label: "Num -" },
     { shortcut: "key-kp-add", label: "Num +" },
-    { shortcut: "key-kp-enter", label: "Num Enter" },
+    { shortcut: "key-kp-enter", label: "Num Enter", glyph: "󰌑" },
     { shortcut: "key-kp-equal", label: "Num =" },
-    { shortcut: "key-escape", label: "Escape", kind: "escape" },
-    { shortcut: "modifier-ctrl-left", label: "Ctrl", kind: "modifier", modifier: "ctrl" },
-    { shortcut: "modifier-ctrl-right", label: "Ctrl", kind: "modifier", modifier: "ctrl" },
-    { shortcut: "modifier-shift-left", label: "Shift", kind: "modifier", modifier: "shift" },
-    { shortcut: "modifier-shift-right", label: "Shift", kind: "modifier", modifier: "shift" },
-    { shortcut: "modifier-alt-left", label: "Alt", kind: "modifier", modifier: "alt" },
-    { shortcut: "modifier-alt-right", label: "Alt", kind: "modifier", modifier: "alt" },
-    { shortcut: "modifier-super-left", label: "Super", kind: "modifier", modifier: "super" },
-    { shortcut: "modifier-super-right", label: "Super", kind: "modifier", modifier: "super" }
+    { shortcut: "key-escape", label: "Escape", glyph: "󱊷", kind: "escape" },
+    { shortcut: "modifier-ctrl-left", label: "Ctrl", glyph: "󰘴", kind: "modifier", modifier: "ctrl" },
+    { shortcut: "modifier-ctrl-right", label: "Ctrl", glyph: "󰘴", kind: "modifier", modifier: "ctrl" },
+    { shortcut: "modifier-shift-left", label: "Shift", glyph: "󰘶", kind: "modifier", modifier: "shift" },
+    { shortcut: "modifier-shift-right", label: "Shift", glyph: "󰘶", kind: "modifier", modifier: "shift" },
+    { shortcut: "modifier-alt-left", label: "Alt", glyph: "󰘵", kind: "modifier", modifier: "alt" },
+    { shortcut: "modifier-alt-right", label: "Alt", glyph: "󰘵", kind: "modifier", modifier: "alt" },
+    { shortcut: "modifier-super-left", label: "Super", glyph: "󰘳", kind: "modifier", modifier: "super" },
+    { shortcut: "modifier-super-right", label: "Super", glyph: "󰘳", kind: "modifier", modifier: "super" }
   ]
 
   signal recordingPresentationRequested()
@@ -268,12 +268,29 @@ Item {
     return dispatch.join(" + ")
   }
 
+  function modifierGlyph(name) {
+    var requested = String(name || "").toLowerCase()
+    for (var i = 0; i < keystrokeCatalog.length; i++) {
+      var entry = keystrokeCatalog[i]
+      if (String(entry.modifier || "") === requested && entry.glyph)
+        return String(entry.glyph)
+    }
+    return String(name || "")
+  }
+
+  function activeModifierGlyphs() {
+    var names = activeModifierNames()
+    var glyphs = []
+    for (var i = 0; i < names.length; i++) glyphs.push(modifierGlyph(names[i]))
+    return glyphs
+  }
+
   function appendKeystroke(label, repeated) {
     var now = Date.now()
     var entries = keystrokeEntries.slice(0)
     if (lastKeystrokeAt <= 0 || now - lastKeystrokeAt > 500) entries = []
 
-    var chord = activeModifierNames()
+    var chord = activeModifierGlyphs()
     chord.push(String(label || ""))
     var text = chord.join(" + ")
     var last = entries.length > 0 ? entries[entries.length - 1] : null
@@ -343,7 +360,7 @@ Item {
     for (var key in pressedKeystrokes) pressed[key] = pressedKeystrokes[key]
     pressed[shortcut] = true
     pressedKeystrokes = pressed
-    appendKeystroke(entry.label, wasPressed)
+    appendKeystroke(entry.glyph || entry.label, wasPressed)
 
     if (String(entry.kind || "") === "escape") beginEscapeHold()
   }
