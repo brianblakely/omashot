@@ -252,6 +252,10 @@ assert_contains 'import QtQuick.Layouts' "$KEYSTROKE_OVERLAY" \
   "the keystroke row cannot independently align mixed-font glyphs"
 assert_contains 'Layout.alignment: Qt.AlignVCenter' "$KEYSTROKE_OVERLAY" \
   "mixed-font keystroke runs are not vertically centered"
+assert_contains 'keystrokeEntry.modelData.parts !== undefined' "$KEYSTROKE_OVERLAY" \
+  "QML list-valued keystroke parts are not accepted by the renderer"
+assert_absent 'Array.isArray(keystrokeEntry.modelData.parts)' "$KEYSTROKE_OVERLAY" \
+  "QML list-valued keystroke parts are incorrectly rejected as non-arrays"
 assert_contains 'font.family: requestedFontFamily !== ""' "$KEYSTROKE_OVERLAY" \
   "the Super glyph does not select its configured font family"
 assert_absent 'textFormat: Text.RichText' "$KEYSTROKE_OVERLAY" \

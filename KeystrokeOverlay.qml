@@ -118,7 +118,8 @@ Item {
               spacing: 0
 
               Repeater {
-                model: Array.isArray(keystrokeEntry.modelData.parts)
+                model: keystrokeEntry.modelData.parts !== undefined
+                    && keystrokeEntry.modelData.parts !== null
                   ? keystrokeEntry.modelData.parts
                   : [{ text: String(keystrokeEntry.modelData.text || ""), fontFamily: "" }]
 
