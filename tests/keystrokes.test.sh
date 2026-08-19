@@ -126,17 +126,17 @@ for option in 'non_consuming = true' 'ignore_mods = true' 'repeating = true' \
   rg --fixed-strings --quiet -- "$option" <<<"$global_binding_helper" ||
     fail "ordinary recording bindings omit $option"
 done
-assert_contains 'release = true' "$HELPER" \
-  "recording shortcuts have no explicit release binding"
-assert_equal "2" \
+assert_absent 'release = true' "$HELPER" \
+  "global shortcuts have a duplicate explicit release binding"
+assert_equal "1" \
   "$(rg -c 'table\.insert\(bindings, hl\.bind' <<<"$global_binding_helper")" \
-  "recording shortcuts are not created as press/release pairs"
-assert_contains 'expected_binding_count = (#ordinary + #modifiers + 1) * 2' "$HELPER" \
-  "the cached binding set does not validate every press/release pair"
+  "recording shortcuts are not created as single protocol-aware bindings"
+assert_contains 'expected_binding_count = #ordinary + #modifiers + 1' "$HELPER" \
+  "the cached binding set does not validate every shortcut"
 assert_contains 'add_global_binding(bindings, entry, "Track modifier in Omashot recording", false, true)' \
-  "$HELPER" "modifier shortcuts are not paired with release bindings"
+  "$HELPER" "modifier shortcut endpoints are not installed"
 assert_contains 'add_global_binding(bindings, { "ESCAPE", "key-escape" },' "$HELPER" \
-  "Escape is not paired with a release binding"
+  "the Escape shortcut endpoint is not installed"
 assert_contains 'tracker.subscription = hl.on("input.keyboard.key", function()' "$HELPER" \
   "physical modifier changes are not observed"
 assert_contains 'local pressed = hl.is_key_down(entry[1])' "$HELPER" \
@@ -159,6 +159,7 @@ modifier_lua_test="$TEST_ROOT/modifier-dispatch.lua"
 cat >"$modifier_lua_test" <<'LUA_TEST'
 local physicalKeys = {}
 local dispatched = {}
+local createdBindings = {}
 local rawEventCallback = nil
 local timerCallback = nil
 
@@ -169,8 +170,10 @@ function keybindMethods:is_enabled() return self.enabled end
 hl = { dsp = {} }
 function hl.dsp.global(value) return { kind = "global", value = value } end
 function hl.dsp.event(value) return { kind = "event", value = value } end
-function hl.bind()
-  return setmetatable({ enabled = true }, { __index = keybindMethods })
+function hl.bind(key, dispatcher, options)
+  local binding = { enabled = true, key = key, dispatcher = dispatcher, options = options }
+  table.insert(createdBindings, binding)
+  return setmetatable(binding, { __index = keybindMethods })
 end
 function hl.dispatch(dispatcher)
   assert(type(dispatcher) == "table" and dispatcher.kind == "event")
@@ -197,6 +200,10 @@ sed -n '/^if omashot_recording_keybinds then$/,/^LUA$/p' "$HELPER" \
   | sed '$d' >>"$modifier_lua_test"
 cat >>"$modifier_lua_test" <<'LUA_TEST'
 assert(rawEventCallback and timerCallback)
+assert(#createdBindings == 103)
+for _, binding in ipairs(createdBindings) do
+  assert(binding.options.release ~= true)
+end
 physicalKeys.Super_L = true
 rawEventCallback()
 timerCallback()
@@ -423,7 +430,7 @@ assert_equal "DP-1" \
   "screen recording monitor metadata was not retained"
 
 for source_fragment in '"key-a"' '"key-page-up"' '"key-f12"' \
-  '"modifier-ctrl-left"' '{ "ESCAPE", "key-escape" }' 'release = true'; do
+  '"modifier-ctrl-left"' '{ "ESCAPE", "key-escape" }'; do
   assert_contains "$source_fragment" "$HYPRCTL_LOG" \
     "the installed dynamic bindings omit $source_fragment"
 done

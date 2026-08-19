@@ -793,9 +793,9 @@ local modifiers = {
   { "Super_R", "modifier-super-right" },
 }
 
--- Keep explicit release coverage for every endpoint. Modifier state is also
--- reconciled against Hyprland's physical-key state below because a
--- Lua-wrapped global shortcut can otherwise leave modifiers pressed forever.
+-- Each global binding carries both press and release protocol states. Modifier
+-- state is also reconciled against Hyprland's physical-key state below because
+-- a Lua-wrapped global shortcut can otherwise leave modifiers pressed forever.
 local function add_global_binding(bindings, entry, description, repeating, non_consuming)
   local endpoint = "b.omashot:" .. entry[2]
   local press_options = {
@@ -809,20 +809,14 @@ local function add_global_binding(bindings, entry, description, repeating, non_c
   if repeating then press_options.repeating = true end
   if not non_consuming then press_options.non_consuming = false end
 
+  -- Hyprland's global dispatcher mirrors both physical states through the
+  -- protocol. A second release=true global binding also fires on key-down and
+  -- would make every single press appear as a ×2 repeat.
   table.insert(bindings, hl.bind(entry[1], hl.dsp.global(endpoint), press_options))
-  table.insert(bindings, hl.bind(entry[1], hl.dsp.global(endpoint), {
-    description = "Release " .. description,
-    non_consuming = true,
-    ignore_mods = true,
-    release = true,
-    locked = false,
-    dont_inhibit = false,
-    allow_input_capture = false,
-  }))
 end
 
 local bindings = omashot_recording_binding_sets.keystrokes
-local expected_binding_count = (#ordinary + #modifiers + 1) * 2
+local expected_binding_count = #ordinary + #modifiers + 1
 if not bindings_are_live(bindings, expected_binding_count) then
   bindings = {}
   omashot_recording_binding_sets.keystrokes = bindings
