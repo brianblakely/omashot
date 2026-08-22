@@ -11,6 +11,8 @@ All completed screen recordings open automatically in Omacut.
 ![Omashot UI](preview.png)
 ![Video trimming](preview2.png)
 ![Screenshot annotation](preview3.png)
+![Measure margins](preview4.png)
+![Shrink to subject](preview5.png)
 
 ## Install
 
