@@ -130,28 +130,30 @@ for ratio_spec in 'aspect-ratio-1-1.svg:1:1' 'aspect-ratio-16-9.svg:16:9' \
   magick identify "$icon_path" >/dev/null || fail "the $ratio_icon aspect-ratio glyph is invalid SVG"
   rg --fixed-strings --quiet -- 'width="24" height="24" viewBox="0 0 24 24"' "$icon_path" ||
     fail "the $ratio_icon aspect-ratio glyph does not use a square canvas"
-  if rg --quiet -- '<text' "$icon_path"; then
-    fail "the $ratio_icon aspect-ratio glyph still delegates rendering to plain text"
-  fi
   if rg --quiet -- '<rect' "$icon_path"; then
     fail "the $ratio_icon aspect-ratio glyph is still a generic ratio silhouette"
   fi
   if rg --quiet -- '<(defs|use)([ >])' "$icon_path"; then
     fail "the $ratio_icon glyph uses SVG references that Qt leaves blank"
   fi
-  rendered_ratio=$(rg -o 'data-glyph="[^"]+"' "$icon_path" \
-    | sed -E 's/data-glyph="([^"]+)"/\1/' | tr -d '\n')
+  text_count=$(rg --count '<text ' "$icon_path")
+  [[ $text_count == 1 ]] || fail "the $ratio_icon glyph does not contain one system-font label"
+  rg --fixed-strings --quiet -- 'font-family="monospace"' "$icon_path" ||
+    fail "the $ratio_icon glyph does not follow the system font"
+  rg --fixed-strings --quiet -- 'font-weight="400"' "$icon_path" ||
+    fail "the $ratio_icon glyph does not match the regular system-font weight"
+  rendered_ratio=$(rg -o '>[^<]+</text>' "$icon_path" \
+    | sed -E 's/^>(.*)<\/text>$/\1/')
   [[ $rendered_ratio == "$expected_ratio" ]] ||
     fail "the $ratio_icon glyph renders $rendered_ratio instead of $expected_ratio"
-  direct_path_count=$(rg --count '<path data-glyph=' "$icon_path")
-  [[ $direct_path_count == ${#expected_ratio} ]] ||
-    fail "the $ratio_icon glyph does not contain one direct path per character"
   if [[ -n $SVG_TO_QML ]]; then
     qt_render="$TEST_ROOT/${ratio_icon%.svg}.qml"
     "$SVG_TO_QML" "$icon_path" "$qt_render"
-    qt_path_count=$(rg --count 'ShapePath \{' "$qt_render" || true)
-    [[ $qt_path_count == ${#expected_ratio} ]] ||
+    qt_text_count=$(rg --count '^[[:space:]]*Text \{' "$qt_render" || true)
+    [[ $qt_text_count == 1 ]] ||
       fail "Qt renders the $ratio_icon glyph as blank"
+    rg --fixed-strings --quiet -- "$expected_ratio" "$qt_render" ||
+      fail "Qt does not render the expected $expected_ratio label"
   fi
 done
 assert_contains 'property url iconSource: ""' \

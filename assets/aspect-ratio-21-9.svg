@@ -1,9 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
   <title>21:9 aspect ratio</title>
-  <g fill="#fff" data-label="21:9" transform="translate(2 5) scale(2.5 2.8)">
-    <path data-glyph="2" d="M0 0h2v1H0zM0 2h2v1H0zM0 4h2v1H0zM1.333 1H2v1h-.667zM0 3h.667v1H0z"/>
-    <path data-glyph="1" transform="translate(2.4 0)" d="M.667 0h.666v4H.667zM0 1h.667v1H0zM0 4h2v1H0z"/>
-    <path data-glyph=":" transform="translate(4.8 0)" d="M0 1.1h.8v.7H0zM0 3.2h.8v.7H0z"/>
-    <path data-glyph="9" transform="translate(6 0)" d="M0 0h2v1H0zM0 2h2v1H0zM0 4h2v1H0zM0 1h.667v1H0zM1.333 1H2v3h-.667z"/>
-  </g>
+  <text x="12" y="18.5" fill="#fff" font-family="monospace" font-size="19"
+        font-weight="400" text-anchor="middle" data-label="21:9"
+        transform="translate(12 0) scale(.4386 1) translate(-12 0)">21:9</text>
 </svg>
