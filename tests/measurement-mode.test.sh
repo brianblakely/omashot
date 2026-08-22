@@ -202,6 +202,21 @@ assert_contains 'id: startCap' \
   "margin measurement lines have no perpendicular starting cap"
 assert_contains 'id: endCap' \
   "margin measurement lines have no perpendicular ending cap"
+assert_contains 'property bool subjectCapAtStart: false' \
+  "margin measurement lines cannot identify the subject-facing end"
+assert_contains 'visible: marginLine.subjectCapAtStart' \
+  "the starting cap is not limited to subject-facing line ends"
+assert_contains 'visible: !marginLine.subjectCapAtStart' \
+  "the ending cap is not limited to subject-facing line ends"
+
+for line_spec in 'topMarginLine:false' 'bottomMarginLine:true' \
+    'leftMarginLine:false' 'rightMarginLine:true'; do
+  line_id=${line_spec%%:*}
+  cap_at_start=${line_spec#*:}
+  line_block=$(sed -n "/id: $line_id/,/^        }/p" "$OVERLAY")
+  rg --fixed-strings --quiet -- "subjectCapAtStart: $cap_at_start" <<<"$line_block" ||
+    fail "the $line_id cap is not on the subject-facing end"
+done
 assert_absent 'id: detectedSubjectFrame' \
   "margin measurement still draws a rectangle around the subject"
 assert_contains 'onClicked: root.toggleMarginMeasurements()' \

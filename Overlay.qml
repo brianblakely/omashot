@@ -1303,6 +1303,7 @@ Item {
     id: marginLine
 
     property bool vertical: false
+    property bool subjectCapAtStart: false
     property real span: 0
     readonly property real stroke: Math.max(1, Style.normalBorderWidth)
     readonly property real capLength: Math.max(Style.space(8), stroke * 5)
@@ -1322,6 +1323,7 @@ Item {
 
     Rectangle {
       id: startCap
+      visible: marginLine.subjectCapAtStart
       x: marginLine.vertical ? 0 : -marginLine.stroke / 2
       y: marginLine.vertical ? -marginLine.stroke / 2 : 0
       width: marginLine.vertical ? marginLine.capLength : marginLine.stroke
@@ -1331,6 +1333,7 @@ Item {
 
     Rectangle {
       id: endCap
+      visible: !marginLine.subjectCapAtStart
       x: marginLine.vertical ? 0 : marginLine.span - marginLine.stroke / 2
       y: marginLine.vertical ? marginLine.span - marginLine.stroke / 2 : 0
       width: marginLine.vertical ? marginLine.capLength : marginLine.stroke
@@ -1967,6 +1970,7 @@ Item {
         MarginDimensionLine {
           id: topMarginLine
           vertical: true
+          subjectCapAtStart: false
           span: root.subjectMarginTop
           x: Math.round(root.selectionX + root.subjectMarginLeft + root.subjectWidth / 2 - width / 2)
           y: root.selectionY
@@ -1976,6 +1980,7 @@ Item {
         MarginDimensionLine {
           id: bottomMarginLine
           vertical: true
+          subjectCapAtStart: true
           span: root.subjectMarginBottom
           x: Math.round(root.selectionX + root.subjectMarginLeft + root.subjectWidth / 2 - width / 2)
           y: root.selectionY + root.subjectMarginTop + root.subjectHeight
@@ -1984,6 +1989,7 @@ Item {
 
         MarginDimensionLine {
           id: leftMarginLine
+          subjectCapAtStart: false
           span: root.subjectMarginLeft
           x: root.selectionX
           y: Math.round(root.selectionY + root.subjectMarginTop + root.subjectHeight / 2 - height / 2)
@@ -1992,6 +1998,7 @@ Item {
 
         MarginDimensionLine {
           id: rightMarginLine
+          subjectCapAtStart: true
           span: root.subjectMarginRight
           x: root.selectionX + root.subjectMarginLeft + root.subjectWidth
           y: Math.round(root.selectionY + root.subjectMarginTop + root.subjectHeight / 2 - height / 2)
