@@ -110,31 +110,50 @@ Item {
     && Number(subjectBounds.width) > 0 && Number(subjectBounds.height) > 0
   readonly property int subjectWidth: subjectBoundsValid ? Math.round(Number(subjectBounds.width)) : 0
   readonly property int subjectHeight: subjectBoundsValid ? Math.round(Number(subjectBounds.height)) : 0
-  readonly property int subjectMarginLeft: subjectBoundsValid ? Math.max(0, Math.round(Number(subjectBounds.x))) : 0
-  readonly property int subjectMarginTop: subjectBoundsValid ? Math.max(0, Math.round(Number(subjectBounds.y))) : 0
+  readonly property real subjectAbsoluteX: subjectBoundsValid && isFinite(Number(subjectBounds.absoluteX))
+    ? Number(subjectBounds.absoluteX) : selectionX + (subjectBoundsValid ? Number(subjectBounds.x) : 0)
+  readonly property real subjectAbsoluteY: subjectBoundsValid && isFinite(Number(subjectBounds.absoluteY))
+    ? Number(subjectBounds.absoluteY) : selectionY + (subjectBoundsValid ? Number(subjectBounds.y) : 0)
+  readonly property int subjectMarginLeft: subjectBoundsValid
+    ? Math.max(0, Math.round(subjectAbsoluteX - selectionX)) : 0
+  readonly property int subjectMarginTop: subjectBoundsValid
+    ? Math.max(0, Math.round(subjectAbsoluteY - selectionY)) : 0
   readonly property int subjectMarginRight: subjectBoundsValid
-    ? Math.max(0, selectionW - subjectMarginLeft - subjectWidth) : 0
+    ? Math.max(0, Math.round(selectionX + selectionW - subjectAbsoluteX - subjectWidth)) : 0
   readonly property int subjectMarginBottom: subjectBoundsValid
-    ? Math.max(0, selectionH - subjectMarginTop - subjectHeight) : 0
+    ? Math.max(0, Math.round(selectionY + selectionH - subjectAbsoluteY - subjectHeight)) : 0
   readonly property real measurementScale: captureScale()
+  readonly property bool subjectGeometryMatchesDetection: subjectBoundsValid
+    && Number(subjectBounds.regionX) === selectionX && Number(subjectBounds.regionY) === selectionY
+    && Number(subjectBounds.regionW) === selectionW && Number(subjectBounds.regionH) === selectionH
+  readonly property real subjectMeasurementScaleX: subjectBoundsValid
+    && Number(subjectBounds.regionW) > 0 && isFinite(Number(subjectBounds.captureWidth))
+    ? Number(subjectBounds.captureWidth) / Number(subjectBounds.regionW) : measurementScale
+  readonly property real subjectMeasurementScaleY: subjectBoundsValid
+    && Number(subjectBounds.regionH) > 0 && isFinite(Number(subjectBounds.captureHeight))
+    ? Number(subjectBounds.captureHeight) / Number(subjectBounds.regionH) : measurementScale
   readonly property int selectionPixelWidth: Math.max(1, Math.round(selectionW * measurementScale))
   readonly property int selectionPixelHeight: Math.max(1, Math.round(selectionH * measurementScale))
-  readonly property int subjectPixelMarginLeft: subjectBoundsValid && isFinite(Number(subjectBounds.pixelX))
+  readonly property int subjectPixelMarginLeft: subjectGeometryMatchesDetection
+    && isFinite(Number(subjectBounds.pixelX))
     ? Math.max(0, Math.round(Number(subjectBounds.pixelX)))
-    : Math.max(0, Math.round(subjectMarginLeft * measurementScale))
-  readonly property int subjectPixelMarginTop: subjectBoundsValid && isFinite(Number(subjectBounds.pixelY))
+    : Math.max(0, Math.round(subjectMarginLeft * subjectMeasurementScaleX))
+  readonly property int subjectPixelMarginTop: subjectGeometryMatchesDetection
+    && isFinite(Number(subjectBounds.pixelY))
     ? Math.max(0, Math.round(Number(subjectBounds.pixelY)))
-    : Math.max(0, Math.round(subjectMarginTop * measurementScale))
-  readonly property int subjectPixelMarginRight: subjectBoundsValid && isFinite(Number(subjectBounds.captureWidth))
+    : Math.max(0, Math.round(subjectMarginTop * subjectMeasurementScaleY))
+  readonly property int subjectPixelMarginRight: subjectGeometryMatchesDetection
+    && isFinite(Number(subjectBounds.captureWidth))
     && isFinite(Number(subjectBounds.pixelWidth))
     ? Math.max(0, Math.round(Number(subjectBounds.captureWidth) - Number(subjectBounds.pixelX)
       - Number(subjectBounds.pixelWidth)))
-    : Math.max(0, Math.round(subjectMarginRight * measurementScale))
-  readonly property int subjectPixelMarginBottom: subjectBoundsValid && isFinite(Number(subjectBounds.captureHeight))
+    : Math.max(0, Math.round(subjectMarginRight * subjectMeasurementScaleX))
+  readonly property int subjectPixelMarginBottom: subjectGeometryMatchesDetection
+    && isFinite(Number(subjectBounds.captureHeight))
     && isFinite(Number(subjectBounds.pixelHeight))
     ? Math.max(0, Math.round(Number(subjectBounds.captureHeight) - Number(subjectBounds.pixelY)
       - Number(subjectBounds.pixelHeight)))
-    : Math.max(0, Math.round(subjectMarginBottom * measurementScale))
+    : Math.max(0, Math.round(subjectMarginBottom * subjectMeasurementScaleY))
 
   onHasSelectionChanged: subjectGeometryChanged()
   onSelectionXChanged: subjectGeometryChanged()
@@ -477,9 +496,13 @@ Item {
   }
 
   function subjectGeometryChanged() {
-    subjectBounds = null
-    if (measurementMode && marginMeasurements && hasSelection && targetKind === "region")
-      subjectScanTimer.restart()
+    if (!hasSelection || targetKind !== "region") {
+      subjectBounds = null
+      subjectScanTimer.stop()
+      return
+    }
+
+    if (measurementMode && marginMeasurements) subjectScanTimer.restart()
   }
 
   function toggleMarginMeasurements() {
@@ -544,7 +567,24 @@ Item {
         selectedAspectRatio = ""
         setSelection(subjectScanX + left, subjectScanY + top, width, height,
           panel.width, panel.height)
-        subjectBounds = null
+        subjectBounds = ({
+          x: 0,
+          y: 0,
+          width: width,
+          height: height,
+          absoluteX: selectionX,
+          absoluteY: selectionY,
+          regionX: selectionX,
+          regionY: selectionY,
+          regionW: selectionW,
+          regionH: selectionH,
+          pixelX: 0,
+          pixelY: 0,
+          pixelWidth: Number(parsed.pixelWidth),
+          pixelHeight: Number(parsed.pixelHeight),
+          captureWidth: Number(parsed.pixelWidth),
+          captureHeight: Number(parsed.pixelHeight)
+        })
         if (marginMeasurements) subjectScanTimer.restart()
         else subjectScanTimer.stop()
       } else if (marginMeasurements) {
@@ -553,6 +593,12 @@ Item {
           y: top,
           width: width,
           height: height,
+          absoluteX: subjectScanX + left,
+          absoluteY: subjectScanY + top,
+          regionX: subjectScanX,
+          regionY: subjectScanY,
+          regionW: subjectScanW,
+          regionH: subjectScanH,
           pixelX: Number(parsed.pixelX),
           pixelY: Number(parsed.pixelY),
           pixelWidth: Number(parsed.pixelWidth),
@@ -561,6 +607,8 @@ Item {
           captureHeight: Number(parsed.captureHeight)
         })
       }
+    } else if (geometryUnchanged && action === "measure" && marginMeasurements) {
+      subjectBounds = null
     }
 
     var queued = queuedSubjectScanAction
@@ -1958,7 +2006,7 @@ Item {
         id: subjectMarginIndicators
         anchors.fill: parent
         visible: root.measurementMode && root.marginMeasurements && root.subjectBoundsValid
-          && root.showSelectionFrame && root.pointerAction === ""
+          && root.showSelectionFrame
         z: 5
 
         MarginDimensionLine {

@@ -189,6 +189,27 @@ assert_contains 'component MarginDimensionLine: Item' \
 for line in topMarginLine rightMarginLine bottomMarginLine leftMarginLine; do
   assert_contains "id: $line" "the $line subject-margin indicator is missing"
 done
+subject_geometry_changed=$(sed -n '/^  function subjectGeometryChanged()/,/^  }/p' "$OVERLAY")
+rg --fixed-strings --quiet -- 'if (!hasSelection || targetKind !== "region") {' <<<"$subject_geometry_changed" ||
+  fail "subject measurements are not retained for valid region geometry changes"
+first_geometry_statement=$(sed -n '2p' <<<"$subject_geometry_changed")
+if rg --fixed-strings --quiet -- 'subjectBounds = null' <<<"$first_geometry_statement"; then
+  fail "region geometry changes still clear the cached subject measurement"
+fi
+subject_indicator_visibility=$(sed -n '/id: subjectMarginIndicators/,/z: 5/p' "$OVERLAY")
+if rg --fixed-strings --quiet -- 'pointerAction' <<<"$subject_indicator_visibility"; then
+  fail "subject-margin indicators still disappear during region pointer actions"
+fi
+assert_contains 'readonly property real subjectAbsoluteX:' \
+  "subject measurements do not retain a stable screen position"
+assert_contains 'Math.round(subjectAbsoluteX - selectionX)' \
+  "horizontal subject margins do not update while the region moves"
+assert_contains 'Math.round(subjectAbsoluteY - selectionY)' \
+  "vertical subject margins do not update while the region moves"
+assert_contains 'absoluteX: subjectScanX + left' \
+  "subject scans do not cache the subject's screen position"
+assert_contains 'else if (geometryUnchanged && action === "measure" && marginMeasurements)' \
+  "a completed scan cannot retire a cached subject that is no longer present"
 assert_contains 'id: startCap' \
   "margin measurement lines have no perpendicular starting cap"
 assert_contains 'id: endCap' \
