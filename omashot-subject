@@ -2,36 +2,115 @@
 
 set -euo pipefail
 
-geometry="${1:-}"
-logical_width="${2:-}"
-logical_height="${3:-}"
-
 fail() {
   printf 'omashot-subject: %s\n' "$*" >&2
   exit 1
 }
 
-[[ $geometry =~ ^-?[0-9]+,-?[0-9]+[[:space:]][1-9][0-9]*x[1-9][0-9]*$ ]] ||
-  fail "invalid capture geometry"
-[[ $logical_width =~ ^[1-9][0-9]*$ && $logical_height =~ ^[1-9][0-9]*$ ]] ||
-  fail "invalid logical dimensions"
-((logical_width <= 32768 && logical_height <= 32768)) || fail "dimensions are too large"
-
-command -v grim >/dev/null 2>&1 || fail "grim is required"
-command -v magick >/dev/null 2>&1 || fail "ImageMagick is required"
-
 scan_tmp_root="${TMPDIR:-/tmp}"
 [[ -d $scan_tmp_root ]] || fail "temporary directory is unavailable"
-capture_file=$(mktemp --tmpdir="$scan_tmp_root" omashot-subject-capture.XXXXXX.png)
+
+if [[ ${1:-} == --snapshot ]]; then
+  source_file="${2:-}"
+  output_name="${3:-}"
+  [[ $source_file == /* && $source_file != *$'\n'* ]] || fail "invalid snapshot path"
+  [[ $output_name =~ ^[^[:space:]]+$ ]] || fail "invalid output name"
+  source_dir=${source_file%/*}
+  [[ -d $source_dir ]] || fail "snapshot directory is unavailable"
+  command -v grim >/dev/null 2>&1 || fail "grim is required"
+
+  umask 077
+  snapshot_file=$(mktemp --tmpdir="$source_dir" .omashot-subject-source.XXXXXX.png)
+  cleanup_snapshot() {
+    rm -f -- "$snapshot_file"
+  }
+  trap cleanup_snapshot EXIT
+
+  grim -l 0 -o "$output_name" "$snapshot_file"
+  mv -f -- "$snapshot_file" "$source_file"
+  trap - EXIT
+  printf '%s\n' "$source_file"
+  exit 0
+fi
+
+source_file=""
+geometry=""
+logical_x=0
+logical_y=0
+screen_logical_width=0
+screen_logical_height=0
+
+if [[ ${1:-} == --source ]]; then
+  (($# == 8)) || fail "invalid source arguments"
+  source_file="${2:-}"
+  logical_x="${3:-}"
+  logical_y="${4:-}"
+  logical_width="${5:-}"
+  logical_height="${6:-}"
+  screen_logical_width="${7:-}"
+  screen_logical_height="${8:-}"
+
+  [[ -f $source_file && -r $source_file ]] || fail "subject source is unavailable"
+  [[ $logical_x =~ ^[0-9]+$ && $logical_y =~ ^[0-9]+$ ]] || fail "invalid source offset"
+  [[ $logical_width =~ ^[1-9][0-9]*$ && $logical_height =~ ^[1-9][0-9]*$ ]] ||
+    fail "invalid logical dimensions"
+  [[ $screen_logical_width =~ ^[1-9][0-9]*$ && $screen_logical_height =~ ^[1-9][0-9]*$ ]] ||
+    fail "invalid source dimensions"
+  ((screen_logical_width <= 32768 && screen_logical_height <= 32768)) ||
+    fail "source dimensions are too large"
+  ((logical_x + logical_width <= screen_logical_width \
+    && logical_y + logical_height <= screen_logical_height)) || fail "source crop is out of bounds"
+else
+  (($# == 3)) || fail "invalid capture arguments"
+  geometry="${1:-}"
+  logical_width="${2:-}"
+  logical_height="${3:-}"
+
+  [[ $geometry =~ ^-?[0-9]+,-?[0-9]+[[:space:]][1-9][0-9]*x[1-9][0-9]*$ ]] ||
+    fail "invalid capture geometry"
+  [[ $logical_width =~ ^[1-9][0-9]*$ && $logical_height =~ ^[1-9][0-9]*$ ]] ||
+    fail "invalid logical dimensions"
+fi
+
+((logical_width <= 32768 && logical_height <= 32768)) || fail "dimensions are too large"
+command -v magick >/dev/null 2>&1 || fail "ImageMagick is required"
+
+capture_file=""
 normalized_file=$(mktemp --tmpdir="$scan_tmp_root" omashot-subject-normalized.XXXXXX.png)
 
 cleanup() {
-  rm -f -- "$capture_file" "$normalized_file"
+  [[ -z $capture_file ]] || rm -f -- "$capture_file"
+  rm -f -- "$normalized_file"
 }
 trap cleanup EXIT
 
-grim -l 0 -g "$geometry" "$capture_file"
-magick "$capture_file" -alpha off "$normalized_file"
+if [[ -n $source_file ]]; then
+  read -r source_width source_height < <(
+    magick "$source_file" -format '%w %h\n' info:
+  )
+  [[ $source_width =~ ^[1-9][0-9]*$ && $source_height =~ ^[1-9][0-9]*$ ]] ||
+    fail "could not determine source dimensions"
+
+  pixel_x=$((logical_x * source_width / screen_logical_width))
+  pixel_y=$((logical_y * source_height / screen_logical_height))
+  pixel_right=$(((logical_x + logical_width) * source_width + screen_logical_width - 1))
+  pixel_right=$((pixel_right / screen_logical_width))
+  pixel_bottom=$(((logical_y + logical_height) * source_height + screen_logical_height - 1))
+  pixel_bottom=$((pixel_bottom / screen_logical_height))
+  ((pixel_right <= source_width)) || pixel_right=$source_width
+  ((pixel_bottom <= source_height)) || pixel_bottom=$source_height
+  crop_width=$((pixel_right - pixel_x))
+  crop_height=$((pixel_bottom - pixel_y))
+  ((crop_width > 0 && crop_height > 0)) || fail "source crop is empty"
+
+  magick "$source_file" -alpha off -crop \
+    "${crop_width}x${crop_height}+${pixel_x}+${pixel_y}" +repage "$normalized_file"
+else
+  command -v grim >/dev/null 2>&1 || fail "grim is required"
+  capture_file=$(mktemp --tmpdir="$scan_tmp_root" omashot-subject-capture.XXXXXX.png)
+  grim -l 0 -g "$geometry" "$capture_file"
+  magick "$capture_file" -alpha off "$normalized_file"
+fi
 
 read -r capture_width capture_height < <(
   magick "$normalized_file" -format '%w %h\n' info:

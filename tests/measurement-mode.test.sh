@@ -61,8 +61,14 @@ assert_contains 'measurementPress.point.position.x : measurementHover.point.posi
   "the horizontal crosshair position is not bound directly to pointer events"
 assert_contains 'measurementPress.point.position.y : measurementHover.point.position.y' \
   "the vertical crosshair position is not bound directly to pointer events"
-assert_contains 'root.measurementMode ? Qt.BlankCursor : Qt.CrossCursor' \
-  "the independently composited cursor is still shown over the measurement canvas"
+assert_contains 'cursorShape: Qt.CrossCursor' \
+  "the native cursor is not visible over the measurement canvas"
+assert_contains 'cursorShape: Qt.SizeAllCursor' \
+  "the native move cursor is not visible over the selected region"
+assert_contains 'cursorShape: parent.cursor' \
+  "the native directional cursor is not visible over resize handles"
+assert_absent 'Qt.BlankCursor' \
+  "measurement mode still hides the native cursor"
 assert_absent 'function updateMeasurementPointer(' \
   "crosshair motion still passes through the laggy JavaScript relay"
 
@@ -123,8 +129,8 @@ assert_contains 'onClicked: root.toggleMarginMeasurements()' \
   "the subject-margin button is not interactive"
 assert_contains 'id: marginMeasurementsButton' \
   "the measurement toolbar has no margin button"
-assert_contains 'readonly property string marginMeasurementIcon: "󰍓" // nf-md-margin' \
-  "the margin button has no Nerd Font margin glyph"
+assert_contains 'readonly property string marginMeasurementIcon: "󰕞" // nf-md-vector_line' \
+  "the margin button has no Nerd Font vector-line glyph"
 assert_contains 'iconText: root.marginMeasurementIcon' \
   "the margin button does not use its Nerd Font glyph"
 assert_absent 'labelText: "Margins"' \
@@ -139,10 +145,23 @@ assert_contains 'iconText: root.autoFitIcon' \
   "the auto-fit button does not use its Nerd Font glyph"
 assert_absent 'labelText: "Auto-fit"' \
   "the auto-fit button still uses a text label"
-assert_contains 'visible: root.showSelectionFrame && !root.recordingPresentation && !root.subjectScanPending' \
-  "selection chrome is not hidden while subject pixels are sampled"
-assert_contains 'visible: !root.pickerMode && !root.recordingPresentation && !root.subjectScanPending' \
-  "the main toolbar can contaminate subject detection"
+assert_contains 'id: subjectSnapshotProc' \
+  "the overlay does not capture a clean subject-detection source"
+assert_contains 'subjectSnapshotProc.command = [subjectHelperPath, "--snapshot", subjectSourcePath,' \
+  "the clean subject source is not captured before the overlay opens"
+assert_contains 'subjectScanProc.command = [subjectHelperPath, "--source", subjectSourcePath,' \
+  "margin measurements do not scan the clean frozen source"
+assert_contains 'subjectSourceCleanupProc.command = ["rm", "-f", "--", subjectSourcePath]' \
+  "the private frozen subject source is not removed when Omashot closes"
+assert_absent 'id: subjectCaptureTimer' \
+  "subject scans still wait for the UI to disappear"
+assert_absent '&& !root.subjectScanPending' \
+  "subject scans still hide or disable visible Omashot UI"
+
+subject_scan_request=$(sed -n '/^  function requestSubjectScan(action)/,/^  }/p' "$OVERLAY")
+if rg --fixed-strings --quiet -- 'measurementPointerActive = false' <<<"$subject_scan_request"; then
+  fail "subject scans still hide the cursor crosshairs"
+fi
 
 [[ -x $SUBJECT_HELPER ]] || fail "the subject detector is not executable"
 bash -n "$SUBJECT_HELPER" || fail "the subject detector has invalid shell syntax"
@@ -157,6 +176,8 @@ mkdir -p "$STUB_BIN"
 cat >"$STUB_BIN/grim" <<'STUB'
 #!/usr/bin/env bash
 
+[[ ${TEST_GRIM_FORBIDDEN:-false} != true ]] || exit 99
+[[ -z ${TEST_GRIM_LOG:-} ]] || printf '%s\n' "$*" >>"$TEST_GRIM_LOG"
 output=${!#}
 case "${TEST_SUBJECT_IMAGE:-subject}" in
   subject)
@@ -170,6 +191,14 @@ case "${TEST_SUBJECT_IMAGE:-subject}" in
 esac
 STUB
 chmod +x "$STUB_BIN/grim"
+
+snapshot_file="$TEST_ROOT/source-snapshot.png"
+snapshot_log="$TEST_ROOT/snapshot-grim.log"
+snapshot_result=$(TEST_GRIM_LOG="$snapshot_log" PATH="$STUB_BIN:$PATH" \
+  "$SUBJECT_HELPER" --snapshot "$snapshot_file" "DP-1")
+[[ $snapshot_result == "$snapshot_file" && -s $snapshot_file ]] ||
+  fail "the clean subject source was not captured"
+grep -Fq -- '-o DP-1' "$snapshot_log" || fail "the subject snapshot used the wrong output"
 
 bounds=$(PATH="$STUB_BIN:$PATH" "$SUBJECT_HELPER" "5,6 100x80" 100 80)
 jq -e '.x == 20 and .y == 10 and .width == 60 and .height == 60
@@ -186,5 +215,15 @@ jq -e '.x == 10 and .y == 5 and .width == 30 and .height == 30
 uniform=$(TEST_SUBJECT_IMAGE=uniform PATH="$STUB_BIN:$PATH" \
   "$SUBJECT_HELPER" "5,6 100x80" 100 80 2>/dev/null)
 [[ $uniform == null ]] || fail "a uniform region was mistaken for a subject"
+
+source_image="$TEST_ROOT/frozen-source.png"
+magick -size 400x320 "xc:#f0f0f0" -fill "#222222" \
+  -draw "rectangle 140,100 259,219" "$source_image"
+source_bounds=$(TEST_GRIM_FORBIDDEN=true PATH="$STUB_BIN:$PATH" \
+  "$SUBJECT_HELPER" --source "$source_image" 50 40 100 80 200 160)
+jq -e '.x == 20 and .y == 10 and .width == 60 and .height == 60
+  and .pixelX == 40 and .pixelY == 20 and .pixelWidth == 120 and .pixelHeight == 120
+  and .captureWidth == 200 and .captureHeight == 160' <<<"$source_bounds" >/dev/null ||
+  fail "the frozen subject source was cropped incorrectly: $source_bounds"
 
 printf 'PASS: measurement-assisted region selection\n'

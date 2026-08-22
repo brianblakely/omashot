@@ -20,6 +20,9 @@ Item {
   readonly property string subjectHelperPath: sourceDir
     ? sourceDir + "/omashot-subject"
     : Qt.resolvedUrl("omashot-subject").toString().replace(/^file:\/\//, "")
+  readonly property string runtimeDir: String(Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
+  readonly property string subjectSourcePath: runtimeDir + "/omashot-subject-source-"
+    + pluginId.replace(/[^A-Za-z0-9_.-]/g, "_") + ".png"
   property string captureKind: "screenshot"
   property bool hasSelection: false
   property int selectionX: 0
@@ -64,13 +67,14 @@ Item {
   property int subjectScanW: 0
   property int subjectScanH: 0
   property string subjectScanScreenName: ""
-  property string subjectScanGeometry: ""
+  property bool subjectSourceReady: false
+  property string subjectSnapshotOutput: ""
 
   readonly property string screenRecordingIcon: "󰻂" // Omarchy bar recording indicator
   readonly property string recordingPlayIcon: "" // nf-fa-circle_play
   readonly property string recordingStopIcon: "" // nf-fa-circle_stop
   readonly property string measurementIcon: "󰑭" // nf-md-ruler
-  readonly property string marginMeasurementIcon: "󰍓" // nf-md-margin
+  readonly property string marginMeasurementIcon: "󰕞" // nf-md-vector_line
   readonly property string autoFitIcon: "󱣴" // nf-md-fit_to_screen
 
   readonly property var captureKinds: [
@@ -184,6 +188,11 @@ Item {
     freezeOpenTimer.stop()
     freezeRestartTimer.stop()
     recordingStartTimeout.stop()
+    subjectSourceReady = false
+    subjectSnapshotOutput = ""
+    if (subjectSnapshotProc.running) subjectSnapshotProc.running = false
+    subjectSourceCleanupProc.command = ["rm", "-f", "--", subjectSourcePath]
+    subjectSourceCleanupProc.running = true
     if (preserveFreeze) freezeCaptureCleanupTimer.restart()
     else {
       freezeCaptureCleanupTimer.stop()
@@ -301,9 +310,7 @@ Item {
     subjectScanAction = ""
     queuedSubjectScanAction = ""
     subjectScanOutput = ""
-    subjectScanGeometry = ""
     subjectScanTimer.stop()
-    subjectCaptureTimer.stop()
     if (subjectScanProc.running) subjectScanProc.running = false
   }
 
@@ -316,7 +323,6 @@ Item {
     marginMeasurements = false
     subjectBounds = null
     subjectScanTimer.stop()
-    subjectCaptureTimer.stop()
     subjectScanPending = false
     subjectScanAction = ""
     queuedSubjectScanAction = ""
@@ -479,15 +485,8 @@ Item {
     if (marginMeasurements) requestSubjectScan("measure")
   }
 
-  function globalSelectionGeometry() {
-    if (!hasSelection) return ""
-    var point = localToGlobal(selectionX, selectionY, selectionScreenName || panel.currentScreenName)
-    return Math.round(point.x) + "," + Math.round(point.y) + " "
-      + Math.round(selectionW) + "x" + Math.round(selectionH)
-  }
-
   function requestSubjectScan(action) {
-    if (!measurementMode || !hasSelection || targetKind !== "region") return
+    if (!measurementMode || !hasSelection || targetKind !== "region" || !subjectSourceReady) return
 
     var requested = String(action || "measure") === "shrink" ? "shrink" : "measure"
     subjectScanTimer.stop()
@@ -502,11 +501,9 @@ Item {
     subjectScanW = selectionW
     subjectScanH = selectionH
     subjectScanScreenName = selectionScreenName || panel.currentScreenName
-    subjectScanGeometry = globalSelectionGeometry()
     subjectScanOutput = ""
     subjectScanPending = true
-    measurementPointerActive = false
-    subjectCaptureTimer.restart()
+    startSubjectScan()
   }
 
   function startSubjectScan() {
@@ -515,8 +512,9 @@ Item {
       return
     }
 
-    subjectScanProc.command = [subjectHelperPath, subjectScanGeometry,
-      String(subjectScanW), String(subjectScanH)]
+    subjectScanProc.command = [subjectHelperPath, "--source", subjectSourcePath,
+      String(subjectScanX), String(subjectScanY), String(subjectScanW), String(subjectScanH),
+      String(Math.round(panel.width)), String(Math.round(panel.height))]
     subjectScanProc.running = true
   }
 
@@ -581,9 +579,20 @@ Item {
   }
 
   function startFreeze() {
-    if (!freezeOpenPending || freezeProc.running) return
+    if (!freezeOpenPending || freezeProc.running || subjectSnapshotProc.running) return
 
     freezeRestartPending = false
+    subjectSourceReady = false
+    subjectSnapshotOutput = ""
+    subjectSnapshotProc.command = [subjectHelperPath, "--snapshot", subjectSourcePath,
+      panel.currentScreenName]
+    subjectSnapshotProc.running = true
+  }
+
+  function finishSubjectSnapshot() {
+    if (!freezeOpenPending || freezeProc.running || subjectSnapshotProc.running) return
+
+    subjectSourceReady = String(subjectSnapshotOutput || "").trim() === subjectSourcePath
     freezeProc.running = true
     freezeOpenTimer.restart()
   }
@@ -595,6 +604,14 @@ Item {
     freezeCaptureCleanupTimer.stop()
     freezeOpenTimer.stop()
     freezeRestartTimer.stop()
+    if (subjectSourceCleanupProc.running) subjectSourceCleanupProc.running = false
+    subjectSourceReady = false
+    subjectSnapshotOutput = ""
+    if (subjectSnapshotProc.running) {
+      freezeRestartPending = true
+      subjectSnapshotProc.running = false
+      return
+    }
     if (freezeProc.running) {
       freezeRestartPending = true
       freezeProc.running = false
@@ -1532,14 +1549,6 @@ Item {
     onTriggered: root.requestSubjectScan("measure")
   }
 
-  Timer {
-    id: subjectCaptureTimer
-    // Allow the measurement chrome to leave the rendered frame before grim reads it.
-    interval: 50
-    repeat: false
-    onTriggered: root.startSubjectScan()
-  }
-
   Process {
     id: subjectScanProc
 
@@ -1549,6 +1558,24 @@ Item {
     }
 
     onExited: Qt.callLater(function() { root.finishSubjectScan() })
+  }
+
+  Process {
+    id: subjectSnapshotProc
+
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.subjectSnapshotOutput = String(text || "")
+    }
+
+    onExited: {
+      if (root.freezeRestartPending) freezeRestartTimer.restart()
+      else Qt.callLater(function() { root.finishSubjectSnapshot() })
+    }
+  }
+
+  Process {
+    id: subjectSourceCleanupProc
   }
 
   Process {
@@ -1671,7 +1698,7 @@ Item {
         anchors.fill: parent
         enabled: root.pointerAction === ""
         hoverEnabled: true
-        cursorShape: root.measurementMode ? Qt.BlankCursor : parent.cursor
+        cursorShape: parent.cursor
         acceptedButtons: Qt.LeftButton
         onPressed: function(mouse) {
           var point = mapToItem(selectionLayer, mouse.x, mouse.y)
@@ -1704,7 +1731,7 @@ Item {
 
       HoverHandler {
         id: measurementHover
-        enabled: root.measurementMode && !root.subjectScanPending && !root.recordingPresentation
+        enabled: root.measurementMode && !root.recordingPresentation
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
         blocking: false
         target: null
@@ -1767,7 +1794,7 @@ Item {
         width: parent.width
         height: Math.max(1, root.regionBorderWidth)
         visible: root.measurementMode && root.measurementPointerActive
-          && !root.subjectScanPending && !root.recordingPresentation
+          && !root.recordingPresentation
         color: Color.accent
         opacity: 0.52
         z: 3
@@ -1788,7 +1815,7 @@ Item {
       MouseArea {
         id: selectionPointer
         anchors.fill: parent
-        cursorShape: root.measurementMode ? Qt.BlankCursor : Qt.CrossCursor
+        cursorShape: Qt.CrossCursor
         acceptedButtons: Qt.LeftButton
         hoverEnabled: root.targetDiscoveryMode || root.measurementMode
         preventStealing: true
@@ -1817,7 +1844,7 @@ Item {
         y: root.selectionY - root.regionBorderWidth
         width: root.selectionW + root.regionBorderWidth * 2
         height: root.selectionH + root.regionBorderWidth * 2
-        visible: root.showSelectionFrame && !root.recordingPresentation && !root.subjectScanPending
+        visible: root.showSelectionFrame && !root.recordingPresentation
         color: "transparent"
         border.color: Color.accent
         border.width: root.regionBorderWidth
@@ -1828,7 +1855,7 @@ Item {
           anchors.fill: parent
           enabled: root.pointerAction === ""
           hoverEnabled: root.measurementMode
-          cursorShape: root.measurementMode ? Qt.BlankCursor : Qt.SizeAllCursor
+          cursorShape: Qt.SizeAllCursor
           acceptedButtons: Qt.LeftButton
           preventStealing: true
           onPressed: function(mouse) {
@@ -1894,7 +1921,7 @@ Item {
         id: subjectMarginIndicators
         anchors.fill: parent
         visible: root.measurementMode && root.marginMeasurements && root.subjectBoundsValid
-          && root.showSelectionFrame && !root.subjectScanPending && root.pointerAction === ""
+          && root.showSelectionFrame && root.pointerAction === ""
         z: 5
 
         MarginDimensionLine {
@@ -1995,7 +2022,7 @@ Item {
           ? root.selectionY + root.selectionH + lowerKnobClearance
           : Math.max(0, root.selectionY - lowerKnobClearance - height)
         visible: root.measurementMode && root.showSelectionFrame
-          && !root.subjectScanPending && !root.recordingPresentation
+          && !root.recordingPresentation
         z: 7
       }
 
@@ -2108,7 +2135,7 @@ Item {
 
     BorderSurface {
       id: toolbar
-      visible: !root.pickerMode && !root.recordingPresentation && !root.subjectScanPending
+      visible: !root.pickerMode && !root.recordingPresentation
       readonly property int dropdownButtonWidth: Style.spacing.controlHeight + Style.spacing.controlPaddingX
       readonly property real edgeMargin: Math.max(Style.gapsOut, Style.space(14))
       readonly property real normalX: (panel.width - toolbar.width) / 2
