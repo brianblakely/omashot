@@ -1148,6 +1148,7 @@ Item {
     readonly property color idleText: Color.menu.text
     readonly property color ctaColor: Color.accent
     readonly property real iconExtent: Style.font.icon
+    readonly property real labelAvailableWidth: Math.max(1, width - Style.spacing.xs * 2)
     readonly property color iconColor: cta ? idleText : (checked ? activeText : idleText)
     readonly property color selectedBorder: Color.menu.selectedBorder.a > 0
       ? Color.menu.selectedBorder
@@ -1201,22 +1202,28 @@ Item {
       }
 
       Text {
+        id: buttonLabel
+
         visible: menuButton.labelText !== ""
         anchors.verticalCenter: parent.verticalCenter
-        width: menuButton.square
-          ? Math.max(1, menuButton.width - Style.spacing.xs * 2)
-          : implicitWidth
-        height: menuButton.square
-          ? Math.max(1, menuButton.height - Style.spacing.xs * 2)
-          : implicitHeight
+        width: implicitWidth
+        height: implicitHeight
         text: menuButton.labelText
         color: menuButton.checked ? menuButton.activeText : menuButton.idleText
         font.family: Style.font.menuFamily
         font.pixelSize: Style.font.bodySmall
-        fontSizeMode: menuButton.square ? Text.Fit : Text.FixedSize
-        minimumPixelSize: 6
+        fontSizeMode: Text.FixedSize
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
+
+        transform: Scale {
+          origin.x: buttonLabel.width / 2
+          origin.y: buttonLabel.height / 2
+          xScale: menuButton.square
+            ? Math.min(1, menuButton.labelAvailableWidth / Math.max(1, buttonLabel.implicitWidth))
+            : 1
+          yScale: 1
+        }
       }
     }
 

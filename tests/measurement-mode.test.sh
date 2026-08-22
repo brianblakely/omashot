@@ -140,8 +140,18 @@ assert_contains 'property bool square: false' \
   "menu buttons cannot opt into a square text-label layout"
 assert_contains 'implicitWidth: square || labelText === ""' \
   "square text buttons are not constrained to the control height"
-assert_contains 'fontSizeMode: menuButton.square ? Text.Fit : Text.FixedSize' \
-  "long aspect-ratio labels do not fit inside their square buttons"
+assert_contains 'readonly property real labelAvailableWidth: Math.max(1, width - Style.spacing.xs * 2)' \
+  "square text buttons do not preserve an inner label margin"
+assert_contains 'font.pixelSize: Style.font.bodySmall' \
+  "aspect-ratio labels do not share the toolbar text size"
+assert_contains 'fontSizeMode: Text.FixedSize' \
+  "aspect-ratio labels can still change font size"
+assert_contains '? Math.min(1, menuButton.labelAvailableWidth / Math.max(1, buttonLabel.implicitWidth))' \
+  "long aspect-ratio labels do not condense to the available width"
+assert_contains 'yScale: 1' \
+  "aspect-ratio label fitting changes the text height"
+assert_absent 'minimumPixelSize: 6' \
+  "aspect-ratio labels still use variable-size font fitting"
 
 measurement_controls=$(sed -n '/id: regionMeasurementControls/,/^      }/p' "$OVERLAY")
 rg --fixed-strings --quiet -- 'labelText: String(modelData.label || "")' <<<"$measurement_controls" ||
