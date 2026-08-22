@@ -142,8 +142,10 @@ assert_contains 'implicitWidth: square || labelText === ""' \
   "square text buttons are not constrained to the control height"
 assert_contains 'readonly property real labelAvailableWidth: Math.max(1, width - Style.spacing.xs * 2)' \
   "square text buttons do not preserve an inner label margin"
-assert_contains 'font.pixelSize: Style.font.bodySmall' \
-  "aspect-ratio labels do not share the toolbar text size"
+assert_contains 'property real labelFontSize: Style.font.bodySmall' \
+  "menu buttons have no overridable label size"
+assert_contains 'font.pixelSize: menuButton.labelFontSize' \
+  "menu button labels do not use their configured size"
 assert_contains 'fontSizeMode: Text.FixedSize' \
   "aspect-ratio labels can still change font size"
 assert_contains '? Math.min(1, menuButton.labelAvailableWidth / Math.max(1, buttonLabel.implicitWidth))' \
@@ -156,6 +158,8 @@ assert_absent 'minimumPixelSize: 6' \
 measurement_controls=$(sed -n '/id: regionMeasurementControls/,/^      }/p' "$OVERLAY")
 rg --fixed-strings --quiet -- 'labelText: String(modelData.label || "")' <<<"$measurement_controls" ||
   fail "aspect-ratio buttons do not render their plain-text labels"
+rg --fixed-strings --quiet -- 'labelFontSize: Math.max(1, Style.font.caption - 1)' <<<"$measurement_controls" ||
+  fail "aspect-ratio buttons do not use the reduced caption size"
 rg --fixed-strings --quiet -- 'square: true' <<<"$measurement_controls" ||
   fail "aspect-ratio buttons are not square"
 assert_contains 'function setAspectSelectionFromAnchor(' \

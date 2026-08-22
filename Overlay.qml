@@ -1137,6 +1137,7 @@ Item {
 
     property string iconText: ""
     property string labelText: ""
+    property real labelFontSize: Style.font.bodySmall
     property string tooltipText: ""
     property bool checked: false
     property bool cta: false
@@ -1211,7 +1212,7 @@ Item {
         text: menuButton.labelText
         color: menuButton.checked ? menuButton.activeText : menuButton.idleText
         font.family: Style.font.menuFamily
-        font.pixelSize: Style.font.bodySmall
+        font.pixelSize: menuButton.labelFontSize
         fontSizeMode: Text.FixedSize
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
@@ -2103,6 +2104,7 @@ Item {
             MenuButton {
               required property var modelData
               labelText: String(modelData.label || "")
+              labelFontSize: Math.max(1, Style.font.caption - 1)
               square: true
               checked: root.selectedAspectRatio === String(modelData.value || "")
               onClicked: root.toggleAspectRatio(modelData.value, selectionLayer.width, selectionLayer.height)
