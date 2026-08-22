@@ -2083,7 +2083,7 @@ Item {
           MenuButton {
             id: autoFitButton
             iconText: root.autoFitIcon
-            tooltipText: "Shrink region to detected subject"
+            tooltipText: "Shrink region to subject"
             onClicked: root.requestSubjectScan("shrink")
           }
         }

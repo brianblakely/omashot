@@ -160,6 +160,10 @@ assert_absent 'labelText: "Margins"' \
   "the margin button still uses a text label"
 assert_contains 'onClicked: root.requestSubjectScan("shrink")' \
   "the fit-to-subject button is not interactive"
+assert_contains 'tooltipText: "Shrink region to subject"' \
+  "the fit-to-subject tooltip has the wrong wording"
+assert_absent 'tooltipText: "Shrink region to detected subject"' \
+  "the fit-to-subject tooltip still says detected subject"
 assert_contains 'id: autoFitButton' \
   "the measurement toolbar has no auto-fit button"
 assert_contains 'readonly property string autoFitIcon: "󱣴" // nf-md-fit_to_screen' \
