@@ -155,6 +155,7 @@ Item {
 
     escapeDismissPending = false
     resetMeasurementMode()
+    measurementMode = service ? service.measurementModeEnabled === true : false
     var payload = ({})
     try { payload = JSON.parse(payloadJson || "{}") || ({}) } catch (e) { payload = ({}) }
 
@@ -315,7 +316,10 @@ Item {
   }
 
   function toggleMeasurementMode() {
-    measurementMode = !measurementMode
+    var next = !measurementMode
+    measurementMode = next
+    if (service && typeof service.setMeasurementModeEnabled === "function")
+      service.setMeasurementModeEnabled(next)
     measurementPointerActive = false
     if (measurementMode) return
 

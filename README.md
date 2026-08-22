@@ -28,7 +28,7 @@ omarchy plugin add https://github.com/brianblakely/omashot.git
 
 ### Measure a Region
 
-Turn on `Measure` in the toolbar to use cursor crosshairs and see live pixel dimensions. The crosshairs follow the visible pointer over the capture canvas. After drawing a region, you can constrain it to `1:1`, `16:9`, `16:10`, `21:9`, or `4:3`, show capped measurement lines from the region to the detected subject, or use `Auto-fit` to shrink the region to that subject.
+Turn on `Measure` in the toolbar to use cursor crosshairs and see live pixel dimensions. Omashot remembers whether Measure was enabled the next time it opens. The crosshairs follow the visible pointer over the capture canvas. After drawing a region, you can constrain it to `1:1`, `16:9`, `16:10`, `21:9`, or `4:3`, show capped measurement lines from the region to the detected subject, or use `Auto-fit` to shrink the region to that subject.
 
 ### Quick Capture Hotkeys
 

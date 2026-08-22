@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "b.omashot",
   "name": "Omashot",
-  "version": "0.0.74",
+  "version": "0.0.75",
   "author": "Brian Blakely",
   "description": "Screenshot and screen-recording overlay for Omarchy",
   "kinds": [

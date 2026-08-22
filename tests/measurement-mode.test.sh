@@ -4,6 +4,7 @@ set -euo pipefail
 
 PLUGIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 OVERLAY="$PLUGIN_DIR/Overlay.qml"
+SERVICE="$PLUGIN_DIR/Service.qml"
 SUBJECT_HELPER="$PLUGIN_DIR/omashot-subject"
 TEST_ROOT=$(mktemp -d)
 STUB_BIN="$TEST_ROOT/bin"
@@ -30,6 +31,11 @@ assert_absent() {
   fi
 }
 
+assert_service_contains() {
+  local needle="$1" message="$2"
+  rg --fixed-strings --quiet -- "$needle" "$SERVICE" || fail "$message"
+}
+
 assert_contains 'property bool measurementMode: false' \
   "measurement mode state is missing"
 assert_contains 'id: measurementModeButton' \
@@ -42,6 +48,23 @@ assert_absent 'labelText: "Measure"' \
   "the measurement toggle still uses a text label"
 assert_contains 'onClicked: root.toggleMeasurementMode()' \
   "the measurement toggle is not interactive"
+assert_service_contains 'readonly property bool measurementModeEnabled: setting("measurementModeEnabled", false) === true' \
+  "measurement mode has no persisted preference"
+assert_service_contains 'function setMeasurementModeEnabled(value)' \
+  "measurement mode has no preference setter"
+assert_service_contains 'saveSettings({ measurementModeEnabled: next })' \
+  "measurement mode changes are not saved"
+assert_contains 'measurementMode = service ? service.measurementModeEnabled === true : false' \
+  "the saved measurement mode is not restored when the overlay opens"
+
+measurement_toggle=$(sed -n '/^  function toggleMeasurementMode()/,/^  }/p' "$OVERLAY")
+rg --fixed-strings --quiet -- 'service.setMeasurementModeEnabled(next)' <<<"$measurement_toggle" ||
+  fail "the measurement toggle does not update its saved preference"
+
+measurement_reset=$(sed -n '/^  function resetMeasurementMode()/,/^  }/p' "$OVERLAY")
+if rg --fixed-strings --quiet -- 'setMeasurementModeEnabled' <<<"$measurement_reset"; then
+  fail "closing the overlay overwrites the saved measurement preference"
+fi
 
 assert_contains 'id: horizontalMeasurementGuide' \
   "the horizontal cursor guide is missing"

@@ -26,6 +26,7 @@ Item {
   readonly property bool recordMicrophoneAudio: setting("recordMicrophoneAudio", false) === true
   readonly property bool recordWebcam: setting("recordWebcam", false) === true
   readonly property bool recordKeystrokes: setting("recordKeystrokes", false) === true
+  readonly property bool measurementModeEnabled: setting("measurementModeEnabled", false) === true
 
   property bool recording: false
   property string lastStatus: "{}"
@@ -600,6 +601,7 @@ Item {
       recordMicrophoneAudio: recordMicrophoneAudio,
       recordWebcam: recordWebcam,
       recordKeystrokes: recordKeystrokes,
+      measurementModeEnabled: measurementModeEnabled,
       recordingTargetScreenName: recordingTargetScreenName,
       recordingTargetGeometry: recordingTargetGeometry,
       helperPath: helperPath,
@@ -640,6 +642,12 @@ Item {
   function setIncludeCursor(value) {
     var next = booleanValue(value)
     saveSettings({ includeCursor: next })
+    return next ? "true" : "false"
+  }
+
+  function setMeasurementModeEnabled(value) {
+    var next = booleanValue(value)
+    saveSettings({ measurementModeEnabled: next })
     return next ? "true" : "false"
   }
 
