@@ -16,6 +16,10 @@ Item {
   property bool opened: false
 
   readonly property string pluginId: manifest && manifest.id ? String(manifest.id) : "b.omashot"
+  readonly property string sourceDir: manifest && manifest.__sourceDir ? String(manifest.__sourceDir) : ""
+  readonly property string subjectHelperPath: sourceDir
+    ? sourceDir + "/omashot-subject"
+    : Qt.resolvedUrl("omashot-subject").toString().replace(/^file:\/\//, "")
   property string captureKind: "screenshot"
   property bool hasSelection: false
   property int selectionX: 0
@@ -46,6 +50,23 @@ Item {
   property bool recordingPresentationConfirmed: false
   property var pickerClients: []
   property var pickerMonitors: []
+  property bool measurementMode: false
+  property bool measurementPointerActive: false
+  property real measurementPointerX: 0
+  property real measurementPointerY: 0
+  property string selectedAspectRatio: ""
+  property bool marginMeasurements: false
+  property var subjectBounds: null
+  property bool subjectScanPending: false
+  property string subjectScanAction: ""
+  property string queuedSubjectScanAction: ""
+  property string subjectScanOutput: ""
+  property int subjectScanX: 0
+  property int subjectScanY: 0
+  property int subjectScanW: 0
+  property int subjectScanH: 0
+  property string subjectScanScreenName: ""
+  property string subjectScanGeometry: ""
 
   readonly property string screenRecordingIcon: "󰻂" // Omarchy bar recording indicator
   readonly property string recordingPlayIcon: "" // nf-fa-circle_play
@@ -54,6 +75,13 @@ Item {
   readonly property var captureKinds: [
     { value: "screenshot", label: "Screenshot", icon: "" },
     { value: "recording", label: "Recording", icon: screenRecordingIcon }
+  ]
+  readonly property var aspectRatios: [
+    { value: "1:1", label: "1:1", ratio: 1 },
+    { value: "16:9", label: "16:9", ratio: 16 / 9 },
+    { value: "16:10", label: "16:10", ratio: 16 / 10 },
+    { value: "21:9", label: "21:9", ratio: 21 / 9 },
+    { value: "4:3", label: "4:3", ratio: 4 / 3 }
   ]
 
   readonly property bool recordingMode: captureKind === "recording"
@@ -71,11 +99,53 @@ Item {
   readonly property real pointerDragThreshold: Style.space(20)
   readonly property real topEdgeTargetHeight: Math.max(1, Style.space(4))
   readonly property real regionBorderWidth: Math.max(1, Style.normalBorderWidth)
+  readonly property bool subjectBoundsValid: subjectBounds !== null
+    && Number(subjectBounds.width) > 0 && Number(subjectBounds.height) > 0
+  readonly property int subjectMarginLeft: subjectBoundsValid ? Math.max(0, Math.round(Number(subjectBounds.x))) : 0
+  readonly property int subjectMarginTop: subjectBoundsValid ? Math.max(0, Math.round(Number(subjectBounds.y))) : 0
+  readonly property int subjectMarginRight: subjectBoundsValid
+    ? Math.max(0, selectionW - subjectMarginLeft - Math.round(Number(subjectBounds.width))) : 0
+  readonly property int subjectMarginBottom: subjectBoundsValid
+    ? Math.max(0, selectionH - subjectMarginTop - Math.round(Number(subjectBounds.height))) : 0
+  readonly property real measurementScale: captureScale()
+  readonly property int selectionPixelWidth: Math.max(1, Math.round(selectionW * measurementScale))
+  readonly property int selectionPixelHeight: Math.max(1, Math.round(selectionH * measurementScale))
+  readonly property int subjectPixelMarginLeft: subjectBoundsValid && isFinite(Number(subjectBounds.pixelX))
+    ? Math.max(0, Math.round(Number(subjectBounds.pixelX)))
+    : Math.max(0, Math.round(subjectMarginLeft * measurementScale))
+  readonly property int subjectPixelMarginTop: subjectBoundsValid && isFinite(Number(subjectBounds.pixelY))
+    ? Math.max(0, Math.round(Number(subjectBounds.pixelY)))
+    : Math.max(0, Math.round(subjectMarginTop * measurementScale))
+  readonly property int subjectPixelMarginRight: subjectBoundsValid && isFinite(Number(subjectBounds.captureWidth))
+    && isFinite(Number(subjectBounds.pixelWidth))
+    ? Math.max(0, Math.round(Number(subjectBounds.captureWidth) - Number(subjectBounds.pixelX)
+      - Number(subjectBounds.pixelWidth)))
+    : Math.max(0, Math.round(subjectMarginRight * measurementScale))
+  readonly property int subjectPixelMarginBottom: subjectBoundsValid && isFinite(Number(subjectBounds.captureHeight))
+    && isFinite(Number(subjectBounds.pixelHeight))
+    ? Math.max(0, Math.round(Number(subjectBounds.captureHeight) - Number(subjectBounds.pixelY)
+      - Number(subjectBounds.pixelHeight)))
+    : Math.max(0, Math.round(subjectMarginBottom * measurementScale))
+
+  onHasSelectionChanged: subjectGeometryChanged()
+  onSelectionXChanged: subjectGeometryChanged()
+  onSelectionYChanged: subjectGeometryChanged()
+  onSelectionWChanged: subjectGeometryChanged()
+  onSelectionHChanged: subjectGeometryChanged()
+  onTargetKindChanged: {
+    if (targetKind !== "region") {
+      subjectBounds = null
+      subjectScanTimer.stop()
+    } else {
+      subjectGeometryChanged()
+    }
+  }
 
   function open(payloadJson) {
     if (recordingPresentation) return
 
     escapeDismissPending = false
+    resetMeasurementMode()
     var payload = ({})
     try { payload = JSON.parse(payloadJson || "{}") || ({}) } catch (e) { payload = ({}) }
 
@@ -121,6 +191,7 @@ Item {
     demoCaptureHeld = false
     recordingPresentation = false
     recordingPresentationConfirmed = false
+    resetMeasurementMode()
     finishPointer()
   }
 
@@ -144,6 +215,9 @@ Item {
     selectionScreenName = ""
     targetKind = ""
     regionLocked = false
+    selectedAspectRatio = ""
+    subjectBounds = null
+    subjectScanTimer.stop()
     finishPointer()
   }
 
@@ -210,6 +284,293 @@ Item {
     else if (name === "microphoneAudio") service.setRecordMicrophoneAudio(!service.recordMicrophoneAudio)
     else if (name === "webcam") service.setRecordWebcam(!service.recordWebcam)
     else if (name === "keystrokes") service.setRecordKeystrokes(!service.recordKeystrokes)
+  }
+
+  function resetMeasurementMode() {
+    measurementMode = false
+    measurementPointerActive = false
+    selectedAspectRatio = ""
+    marginMeasurements = false
+    subjectBounds = null
+    subjectScanPending = false
+    subjectScanAction = ""
+    queuedSubjectScanAction = ""
+    subjectScanOutput = ""
+    subjectScanGeometry = ""
+    subjectScanTimer.stop()
+    subjectCaptureTimer.stop()
+    if (subjectScanProc.running) subjectScanProc.running = false
+  }
+
+  function toggleMeasurementMode() {
+    measurementMode = !measurementMode
+    measurementPointerActive = false
+    if (measurementMode) return
+
+    selectedAspectRatio = ""
+    marginMeasurements = false
+    subjectBounds = null
+    subjectScanTimer.stop()
+    subjectCaptureTimer.stop()
+    subjectScanPending = false
+    subjectScanAction = ""
+    queuedSubjectScanAction = ""
+    if (subjectScanProc.running) subjectScanProc.running = false
+  }
+
+  function updateMeasurementPointer(x, y, active) {
+    if (!measurementMode || subjectScanPending || recordingPresentation) {
+      measurementPointerActive = false
+      return
+    }
+
+    measurementPointerX = clamp(x, 0, panel.width)
+    measurementPointerY = clamp(y, 0, panel.height)
+    measurementPointerActive = active !== false
+  }
+
+  function aspectRatioValue(value) {
+    var requested = String(value || selectedAspectRatio)
+    for (var i = 0; i < aspectRatios.length; i++) {
+      if (String(aspectRatios[i].value) === requested) return Number(aspectRatios[i].ratio)
+    }
+    return 0
+  }
+
+  function applyAspectRatio(value, maxWidth, maxHeight) {
+    var ratio = aspectRatioValue(value)
+    if (!hasSelection || ratio <= 0) return
+
+    var width = selectionW
+    var height = selectionH
+    if (width / height > ratio) width = Math.max(minimumSelectionSize, Math.round(height * ratio))
+    else height = Math.max(minimumSelectionSize, Math.round(width / ratio))
+
+    var centerX = selectionX + selectionW / 2
+    var centerY = selectionY + selectionH / 2
+    setSelection(Math.round(centerX - width / 2), Math.round(centerY - height / 2),
+      width, height, maxWidth, maxHeight)
+  }
+
+  function toggleAspectRatio(value, maxWidth, maxHeight) {
+    var requested = String(value || "")
+    selectedAspectRatio = selectedAspectRatio === requested ? "" : requested
+    if (selectedAspectRatio !== "") applyAspectRatio(selectedAspectRatio, maxWidth, maxHeight)
+  }
+
+  function setAspectSelectionFromAnchor(x, y, maxWidth, maxHeight) {
+    var ratio = aspectRatioValue("")
+    if (ratio <= 0) return false
+
+    var px = clamp(x, 0, maxWidth)
+    var py = clamp(y, 0, maxHeight)
+    var signX = px < pointerAnchorX ? -1 : 1
+    var signY = py < pointerAnchorY ? -1 : 1
+    var width = Math.max(minimumSelectionSize, Math.abs(px - pointerAnchorX))
+    var height = Math.max(minimumSelectionSize, Math.abs(py - pointerAnchorY))
+
+    if (width / height > ratio) height = width / ratio
+    else width = height * ratio
+
+    var availableW = signX < 0 ? pointerAnchorX : maxWidth - pointerAnchorX
+    var availableH = signY < 0 ? pointerAnchorY : maxHeight - pointerAnchorY
+    var scale = Math.min(1, availableW / width, availableH / height)
+    width = Math.max(minimumSelectionSize, Math.round(width * scale))
+    height = Math.max(minimumSelectionSize, Math.round(width / ratio))
+    if (height > availableH) {
+      height = Math.max(minimumSelectionSize, Math.round(availableH))
+      width = Math.max(minimumSelectionSize, Math.round(height * ratio))
+    }
+
+    setSelection(signX < 0 ? pointerAnchorX - width : pointerAnchorX,
+      signY < 0 ? pointerAnchorY - height : pointerAnchorY,
+      width, height, maxWidth, maxHeight)
+    return true
+  }
+
+  function resizeSelectionWithAspect(x, y, maxWidth, maxHeight, edge) {
+    var ratio = aspectRatioValue("")
+    if (ratio <= 0) return false
+
+    var px = clamp(x, 0, maxWidth)
+    var py = clamp(y, 0, maxHeight)
+    var onLeft = edge.indexOf("w") >= 0
+    var onRight = edge.indexOf("e") >= 0
+    var onTop = edge.indexOf("n") >= 0
+    var onBottom = edge.indexOf("s") >= 0
+    var baseLeft = pointerSelectionX
+    var baseTop = pointerSelectionY
+    var baseRight = pointerSelectionX + pointerSelectionW
+    var baseBottom = pointerSelectionY + pointerSelectionH
+    var width
+    var height
+    var left
+    var top
+
+    if ((onLeft || onRight) && (onTop || onBottom)) {
+      var anchorX = onLeft ? baseRight : baseLeft
+      var anchorY = onTop ? baseBottom : baseTop
+      var rawWidth = Math.max(minimumSelectionSize, onLeft ? anchorX - px : px - anchorX)
+      var rawHeight = Math.max(minimumSelectionSize, onTop ? anchorY - py : py - anchorY)
+      var widthChange = Math.abs(rawWidth - pointerSelectionW) / Math.max(1, pointerSelectionW)
+      var heightChange = Math.abs(rawHeight - pointerSelectionH) / Math.max(1, pointerSelectionH)
+
+      if (widthChange >= heightChange) {
+        width = rawWidth
+        height = width / ratio
+      } else {
+        height = rawHeight
+        width = height * ratio
+      }
+
+      var cornerAvailableW = onLeft ? anchorX : maxWidth - anchorX
+      var cornerAvailableH = onTop ? anchorY : maxHeight - anchorY
+      var cornerScale = Math.min(1, cornerAvailableW / width, cornerAvailableH / height)
+      width = Math.max(minimumSelectionSize, Math.round(width * cornerScale))
+      height = Math.max(minimumSelectionSize, Math.round(width / ratio))
+      if (height > cornerAvailableH) {
+        height = Math.max(minimumSelectionSize, Math.round(cornerAvailableH))
+        width = Math.max(minimumSelectionSize, Math.round(height * ratio))
+      }
+
+      left = onLeft ? anchorX - width : anchorX
+      top = onTop ? anchorY - height : anchorY
+      setSelection(left, top, width, height, maxWidth, maxHeight)
+      return true
+    }
+
+    if (onLeft || onRight) {
+      var fixedX = onLeft ? baseRight : baseLeft
+      var centerY = baseTop + pointerSelectionH / 2
+      width = Math.max(minimumSelectionSize, onLeft ? fixedX - px : px - fixedX)
+      var availableWidth = onLeft ? fixedX : maxWidth - fixedX
+      var centeredHeight = Math.max(minimumSelectionSize, 2 * Math.min(centerY, maxHeight - centerY))
+      width = Math.min(width, availableWidth, centeredHeight * ratio)
+      width = Math.max(minimumSelectionSize, Math.round(width))
+      height = Math.max(minimumSelectionSize, Math.round(width / ratio))
+      left = onLeft ? fixedX - width : fixedX
+      top = Math.round(centerY - height / 2)
+      setSelection(left, top, width, height, maxWidth, maxHeight)
+      return true
+    }
+
+    if (onTop || onBottom) {
+      var fixedY = onTop ? baseBottom : baseTop
+      var centerX = baseLeft + pointerSelectionW / 2
+      height = Math.max(minimumSelectionSize, onTop ? fixedY - py : py - fixedY)
+      var availableHeight = onTop ? fixedY : maxHeight - fixedY
+      var centeredWidth = Math.max(minimumSelectionSize, 2 * Math.min(centerX, maxWidth - centerX))
+      height = Math.min(height, availableHeight, centeredWidth / ratio)
+      height = Math.max(minimumSelectionSize, Math.round(height))
+      width = Math.max(minimumSelectionSize, Math.round(height * ratio))
+      left = Math.round(centerX - width / 2)
+      top = onTop ? fixedY - height : fixedY
+      setSelection(left, top, width, height, maxWidth, maxHeight)
+      return true
+    }
+
+    return false
+  }
+
+  function subjectGeometryChanged() {
+    subjectBounds = null
+    if (measurementMode && marginMeasurements && hasSelection && targetKind === "region")
+      subjectScanTimer.restart()
+  }
+
+  function toggleMarginMeasurements() {
+    marginMeasurements = !marginMeasurements
+    subjectBounds = null
+    subjectScanTimer.stop()
+    if (marginMeasurements) requestSubjectScan("measure")
+  }
+
+  function globalSelectionGeometry() {
+    if (!hasSelection) return ""
+    var point = localToGlobal(selectionX, selectionY, selectionScreenName || panel.currentScreenName)
+    return Math.round(point.x) + "," + Math.round(point.y) + " "
+      + Math.round(selectionW) + "x" + Math.round(selectionH)
+  }
+
+  function requestSubjectScan(action) {
+    if (!measurementMode || !hasSelection || targetKind !== "region") return
+
+    var requested = String(action || "measure") === "shrink" ? "shrink" : "measure"
+    subjectScanTimer.stop()
+    if (subjectScanPending || subjectScanProc.running) {
+      if (requested === "shrink" || queuedSubjectScanAction === "") queuedSubjectScanAction = requested
+      return
+    }
+
+    subjectScanAction = requested
+    subjectScanX = selectionX
+    subjectScanY = selectionY
+    subjectScanW = selectionW
+    subjectScanH = selectionH
+    subjectScanScreenName = selectionScreenName || panel.currentScreenName
+    subjectScanGeometry = globalSelectionGeometry()
+    subjectScanOutput = ""
+    subjectScanPending = true
+    measurementPointerActive = false
+    subjectCaptureTimer.restart()
+  }
+
+  function startSubjectScan() {
+    if (!subjectScanPending || !hasSelection || targetKind !== "region") {
+      subjectScanPending = false
+      return
+    }
+
+    subjectScanProc.command = [subjectHelperPath, subjectScanGeometry,
+      String(subjectScanW), String(subjectScanH)]
+    subjectScanProc.running = true
+  }
+
+  function finishSubjectScan() {
+    var action = subjectScanAction
+    var geometryUnchanged = hasSelection && targetKind === "region"
+      && selectionX === subjectScanX && selectionY === subjectScanY
+      && selectionW === subjectScanW && selectionH === subjectScanH
+      && (selectionScreenName || panel.currentScreenName) === subjectScanScreenName
+    var parsed = null
+
+    try { parsed = JSON.parse(subjectScanOutput || "null") } catch (e) { parsed = null }
+    subjectScanPending = false
+    subjectScanAction = ""
+
+    if (geometryUnchanged && parsed && Number(parsed.width) > 0 && Number(parsed.height) > 0) {
+      var left = clamp(parsed.x, 0, subjectScanW - minimumSelectionSize)
+      var top = clamp(parsed.y, 0, subjectScanH - minimumSelectionSize)
+      var width = clamp(parsed.width, minimumSelectionSize, subjectScanW - left)
+      var height = clamp(parsed.height, minimumSelectionSize, subjectScanH - top)
+
+      if (action === "shrink") {
+        selectedAspectRatio = ""
+        setSelection(subjectScanX + left, subjectScanY + top, width, height,
+          panel.width, panel.height)
+        subjectBounds = null
+        if (marginMeasurements) subjectScanTimer.restart()
+        else subjectScanTimer.stop()
+      } else if (marginMeasurements) {
+        subjectBounds = ({
+          x: left,
+          y: top,
+          width: width,
+          height: height,
+          pixelX: Number(parsed.pixelX),
+          pixelY: Number(parsed.pixelY),
+          pixelWidth: Number(parsed.pixelWidth),
+          pixelHeight: Number(parsed.pixelHeight),
+          captureWidth: Number(parsed.captureWidth),
+          captureHeight: Number(parsed.captureHeight)
+        })
+      }
+    }
+
+    var queued = queuedSubjectScanAction
+    queuedSubjectScanAction = ""
+    if (queued !== "") requestSubjectScan(queued)
+    else if (!geometryUnchanged && marginMeasurements) subjectScanTimer.restart()
   }
 
   function normalizePickerAction(action) {
@@ -286,6 +647,18 @@ Item {
       if (monitor.focused === true) fallback = monitor
     }
     return fallback
+  }
+
+  function captureScale() {
+    var scale = 0
+    for (var i = 0; i < pickerMonitors.length; i++) {
+      var candidate = pickerMonitors[i] ? Number(pickerMonitors[i].scale) : NaN
+      if (isFinite(candidate) && candidate > scale) scale = candidate
+    }
+    if (scale > 0) return scale
+
+    var screenScale = panel && panel.screen ? Number(panel.screen.devicePixelRatio) : NaN
+    return isFinite(screenScale) && screenScale > 0 ? screenScale : 1
   }
 
   function monitorOffset(screenName) {
@@ -534,8 +907,9 @@ Item {
     }
 
     if (pointerAction === "draw") {
-      setSelectionEdges(Math.min(pointerAnchorX, px), Math.min(pointerAnchorY, py),
-        Math.max(pointerAnchorX, px), Math.max(pointerAnchorY, py), maxWidth, maxHeight, "se")
+      if (!setAspectSelectionFromAnchor(px, py, maxWidth, maxHeight))
+        setSelectionEdges(Math.min(pointerAnchorX, px), Math.min(pointerAnchorY, py),
+          Math.max(pointerAnchorX, px), Math.max(pointerAnchorY, py), maxWidth, maxHeight, "se")
       return
     }
 
@@ -543,6 +917,8 @@ Item {
       setSelection(pointerSelectionX + dx, pointerSelectionY + dy, pointerSelectionW, pointerSelectionH, maxWidth, maxHeight)
       return
     }
+
+    if (resizeSelectionWithAspect(px, py, maxWidth, maxHeight, pointerAction)) return
 
     var left = pointerSelectionX
     var top = pointerSelectionY
@@ -644,7 +1020,37 @@ Item {
       edge = "s"
     }
 
-    setSelectionEdges(left, top, right, bottom, maxWidth, maxHeight, edge)
+    var ratio = aspectRatioValue("")
+    if (ratio <= 0) {
+      setSelectionEdges(left, top, right, bottom, maxWidth, maxHeight, edge)
+      return
+    }
+
+    if (edge === "w" || edge === "e") {
+      var nextWidth = Math.max(minimumSelectionSize, right - left)
+      var centerY = selectionY + selectionH / 2
+      var fixedX = edge === "w" ? right : left
+      var maxWidthAtEdge = edge === "w" ? fixedX : maxWidth - fixedX
+      var maxCenteredHeight = Math.max(minimumSelectionSize,
+        2 * Math.min(centerY, maxHeight - centerY))
+      nextWidth = Math.max(minimumSelectionSize,
+        Math.round(Math.min(nextWidth, maxWidthAtEdge, maxCenteredHeight * ratio)))
+      var nextHeight = Math.max(minimumSelectionSize, Math.round(nextWidth / ratio))
+      setSelection(edge === "w" ? fixedX - nextWidth : fixedX,
+        Math.round(centerY - nextHeight / 2), nextWidth, nextHeight, maxWidth, maxHeight)
+    } else {
+      var height = Math.max(minimumSelectionSize, bottom - top)
+      var centerX = selectionX + selectionW / 2
+      var fixedY = edge === "n" ? bottom : top
+      var maxHeightAtEdge = edge === "n" ? fixedY : maxHeight - fixedY
+      var maxCenteredWidth = Math.max(minimumSelectionSize,
+        2 * Math.min(centerX, maxWidth - centerX))
+      height = Math.max(minimumSelectionSize,
+        Math.round(Math.min(height, maxHeightAtEdge, maxCenteredWidth / ratio)))
+      var width = Math.max(minimumSelectionSize, Math.round(height * ratio))
+      setSelection(Math.round(centerX - width / 2), edge === "n" ? fixedY - height : fixedY,
+        width, height, maxWidth, maxHeight)
+    }
   }
 
   function handleSelectionKey(event, maxWidth, maxHeight, screenName) {
@@ -790,6 +1196,31 @@ Item {
       delay: 0
       text: menuButton.tooltipText
       fontFamily: Style.font.menuFamily
+    }
+  }
+
+  component MeasurementBadge: Rectangle {
+    id: measurementBadge
+
+    property string labelText: ""
+
+    implicitWidth: badgeText.implicitWidth + Style.spacing.controlPaddingX * 2
+    implicitHeight: Math.max(Style.space(24), badgeText.implicitHeight + Style.spacing.xs * 2)
+    width: implicitWidth
+    height: implicitHeight
+    radius: Style.cornerRadius
+    color: Util.alpha(Color.menu.background, 0.94)
+    border.color: Util.alpha(Color.accent, 0.82)
+    border.width: Math.max(1, Style.normalBorderWidth)
+
+    Text {
+      id: badgeText
+      anchors.centerIn: parent
+      text: measurementBadge.labelText
+      color: Color.menu.text
+      font.family: Style.font.menuFamily
+      font.pixelSize: Style.font.bodySmall
+      font.weight: Font.DemiBold
     }
   }
 
@@ -1036,6 +1467,32 @@ Item {
     }
   }
 
+  Timer {
+    id: subjectScanTimer
+    interval: 180
+    repeat: false
+    onTriggered: root.requestSubjectScan("measure")
+  }
+
+  Timer {
+    id: subjectCaptureTimer
+    // Allow the measurement chrome to leave the rendered frame before grim reads it.
+    interval: 50
+    repeat: false
+    onTriggered: root.startSubjectScan()
+  }
+
+  Process {
+    id: subjectScanProc
+
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.subjectScanOutput = String(text || "")
+    }
+
+    onExited: Qt.callLater(function() { root.finishSubjectScan() })
+  }
+
   Process {
     id: freezeProc
     command: ["hyprpicker", "-r", "-z", "-q"]
@@ -1168,8 +1625,14 @@ Item {
         }
         onPositionChanged: function(mouse) {
           var point = mapToItem(selectionLayer, mouse.x, mouse.y)
+          root.updateMeasurementPointer(point.x, point.y, true)
           root.updatePointer(point.x, point.y, selectionLayer.width, selectionLayer.height)
         }
+        onEntered: {
+          var point = mapToItem(selectionLayer, mouseX, mouseY)
+          root.updateMeasurementPointer(point.x, point.y, true)
+        }
+        onExited: root.measurementPointerActive = false
         onReleased: root.finishPointer()
       }
     }
@@ -1221,19 +1684,47 @@ Item {
         visible: root.hasSelection
       }
 
+      Rectangle {
+        id: horizontalMeasurementGuide
+        x: 0
+        y: Math.round(root.measurementPointerY - height / 2)
+        width: parent.width
+        height: Math.max(1, root.regionBorderWidth)
+        visible: root.measurementMode && root.measurementPointerActive
+          && !root.subjectScanPending && !root.recordingPresentation
+        color: Color.accent
+        opacity: 0.52
+        z: 3
+      }
+
+      Rectangle {
+        id: verticalMeasurementGuide
+        x: Math.round(root.measurementPointerX - width / 2)
+        y: 0
+        width: Math.max(1, root.regionBorderWidth)
+        height: parent.height
+        visible: horizontalMeasurementGuide.visible
+        color: Color.accent
+        opacity: 0.52
+        z: 3
+      }
+
       MouseArea {
         id: selectionPointer
         anchors.fill: parent
         cursorShape: Qt.CrossCursor
         acceptedButtons: Qt.LeftButton
-        hoverEnabled: root.targetDiscoveryMode
+        hoverEnabled: root.targetDiscoveryMode || root.measurementMode
         preventStealing: true
+        onEntered: root.updateMeasurementPointer(mouseX, mouseY, true)
+        onExited: root.measurementPointerActive = false
         onPressed: function(mouse) {
           keyCatcher.forceActiveFocus()
           root.beginTargetPointer(mouse.x, mouse.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
           mouse.accepted = true
         }
         onPositionChanged: function(mouse) {
+          root.updateMeasurementPointer(mouse.x, mouse.y, true)
           if (root.pointerAction !== "") root.updatePointer(mouse.x, mouse.y, selectionLayer.width, selectionLayer.height)
           else root.updateTargetHover(mouse.x, mouse.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
         }
@@ -1250,14 +1741,17 @@ Item {
         y: root.selectionY - root.regionBorderWidth
         width: root.selectionW + root.regionBorderWidth * 2
         height: root.selectionH + root.regionBorderWidth * 2
-        visible: root.showSelectionFrame && !root.recordingPresentation
+        visible: root.showSelectionFrame && !root.recordingPresentation && !root.subjectScanPending
         color: "transparent"
         border.color: Color.accent
         border.width: root.regionBorderWidth
+        z: 4
 
         MouseArea {
+          id: selectionMoveMouse
           anchors.fill: parent
           enabled: root.pointerAction === ""
+          hoverEnabled: root.measurementMode
           cursorShape: Qt.SizeAllCursor
           acceptedButtons: Qt.LeftButton
           preventStealing: true
@@ -1271,8 +1765,14 @@ Item {
           }
           onPositionChanged: function(mouse) {
             var point = mapToItem(selectionLayer, mouse.x, mouse.y)
+            root.updateMeasurementPointer(point.x, point.y, true)
             root.updatePointer(point.x, point.y, selectionLayer.width, selectionLayer.height)
           }
+          onEntered: {
+            var point = mapToItem(selectionLayer, mouseX, mouseY)
+            root.updateMeasurementPointer(point.x, point.y, true)
+          }
+          onExited: root.measurementPointerActive = false
           onReleased: root.finishRegionPointer(selectionLayer.width, selectionLayer.height)
         }
 
@@ -1314,6 +1814,142 @@ Item {
         ResizeHandle {
           edge: "w"
           cursor: Qt.SizeHorCursor
+        }
+      }
+
+      Rectangle {
+        id: detectedSubjectFrame
+        x: root.selectionX + root.subjectMarginLeft
+        y: root.selectionY + root.subjectMarginTop
+        width: root.subjectBoundsValid ? Math.round(Number(root.subjectBounds.width)) : 0
+        height: root.subjectBoundsValid ? Math.round(Number(root.subjectBounds.height)) : 0
+        visible: root.measurementMode && root.marginMeasurements && root.subjectBoundsValid
+          && root.showSelectionFrame && !root.subjectScanPending && root.pointerAction === ""
+        color: "transparent"
+        border.color: Color.accent
+        border.width: Math.max(1, root.regionBorderWidth)
+        opacity: 0.62
+        z: 5
+      }
+
+      MeasurementBadge {
+        id: topMarginBadge
+        readonly property real gap: Style.spacing.xs
+        labelText: String(root.subjectPixelMarginTop)
+        x: root.clamp(root.selectionX + root.selectionW / 2 - width / 2, 0, selectionLayer.width - width)
+        y: root.selectionY >= height + gap
+          ? root.selectionY - height - gap
+          : root.selectionY + gap
+        visible: detectedSubjectFrame.visible
+        z: 6
+      }
+
+      MeasurementBadge {
+        id: bottomMarginBadge
+        readonly property real gap: Style.spacing.xs
+        labelText: String(root.subjectPixelMarginBottom)
+        x: root.clamp(root.selectionX + root.selectionW / 2 - width / 2, 0, selectionLayer.width - width)
+        y: root.selectionY + root.selectionH + height + gap <= selectionLayer.height
+          ? root.selectionY + root.selectionH + gap
+          : root.selectionY + root.selectionH - height - gap
+        visible: detectedSubjectFrame.visible
+        z: 6
+      }
+
+      MeasurementBadge {
+        id: leftMarginBadge
+        readonly property real gap: Style.spacing.xs
+        labelText: String(root.subjectPixelMarginLeft)
+        x: root.selectionX >= width + gap
+          ? root.selectionX - width - gap
+          : root.selectionX + gap
+        y: root.clamp(root.selectionY + root.selectionH / 2 - height / 2, 0, selectionLayer.height - height)
+        visible: detectedSubjectFrame.visible
+        z: 6
+      }
+
+      MeasurementBadge {
+        id: rightMarginBadge
+        readonly property real gap: Style.spacing.xs
+        labelText: String(root.subjectPixelMarginRight)
+        x: root.selectionX + root.selectionW + width + gap <= selectionLayer.width
+          ? root.selectionX + root.selectionW + gap
+          : root.selectionX + root.selectionW - width - gap
+        y: root.clamp(root.selectionY + root.selectionH / 2 - height / 2, 0, selectionLayer.height - height)
+        visible: detectedSubjectFrame.visible
+        z: 6
+      }
+
+      MeasurementBadge {
+        id: selectionDimensions
+        readonly property real gap: Style.spacing.sm
+        readonly property bool placeBelow: root.selectionY + root.selectionH + height
+          + regionMeasurementControls.height + gap * 3 <= selectionLayer.height
+        labelText: root.selectionPixelWidth + " × " + root.selectionPixelHeight + " px"
+        x: root.clamp(root.selectionX + root.selectionW - width, 0, selectionLayer.width - width)
+        y: placeBelow
+          ? root.selectionY + root.selectionH + gap
+          : Math.max(0, root.selectionY - height - gap)
+        visible: root.measurementMode && root.showSelectionFrame
+          && !root.subjectScanPending && !root.recordingPresentation
+        z: 7
+      }
+
+      Rectangle {
+        id: regionMeasurementControls
+        readonly property real padding: Style.spacing.xs
+        readonly property real gap: Style.spacing.sm
+        implicitWidth: measurementControlsRow.implicitWidth + padding * 2
+        implicitHeight: measurementControlsRow.implicitHeight + padding * 2
+        width: implicitWidth
+        height: implicitHeight
+        x: root.clamp(root.selectionX + root.selectionW / 2 - width / 2,
+          0, selectionLayer.width - width)
+        y: selectionDimensions.placeBelow
+          ? selectionDimensions.y + selectionDimensions.height + gap
+          : Math.max(0, selectionDimensions.y - height - gap)
+        visible: selectionDimensions.visible && root.pointerAction === ""
+        radius: Style.cornerRadius
+        color: Util.alpha(Color.menu.background, 0.96)
+        border.color: Color.menu.border
+        border.width: Math.max(1, Style.normalBorderWidth)
+        z: 8
+
+        MouseArea {
+          anchors.fill: parent
+          acceptedButtons: Qt.LeftButton
+          onPressed: function(mouse) { mouse.accepted = true }
+        }
+
+        Row {
+          id: measurementControlsRow
+          anchors.centerIn: parent
+          spacing: Style.spacing.xs
+
+          Repeater {
+            model: root.aspectRatios
+
+            MenuButton {
+              required property var modelData
+              labelText: String(modelData.label || "")
+              checked: root.selectedAspectRatio === String(modelData.value || "")
+              tooltipText: checked ? "Remove aspect-ratio constraint" : "Constrain region to " + labelText
+              onClicked: root.toggleAspectRatio(modelData.value, selectionLayer.width, selectionLayer.height)
+            }
+          }
+
+          MenuButton {
+            labelText: "Margins"
+            checked: root.marginMeasurements
+            tooltipText: root.marginMeasurements ? "Hide subject margins" : "Measure subject margins"
+            onClicked: root.toggleMarginMeasurements()
+          }
+
+          MenuButton {
+            labelText: "Auto-fit"
+            tooltipText: "Shrink region to detected subject"
+            onClicked: root.requestSubjectScan("shrink")
+          }
         }
       }
     }
@@ -1367,16 +2003,22 @@ Item {
 
     BorderSurface {
       id: toolbar
-      visible: !root.pickerMode && !root.recordingPresentation
+      visible: !root.pickerMode && !root.recordingPresentation && !root.subjectScanPending
       readonly property int dropdownButtonWidth: Style.spacing.controlHeight + Style.spacing.controlPaddingX
       readonly property real edgeMargin: Math.max(Style.gapsOut, Style.space(14))
       readonly property real normalX: (panel.width - toolbar.width) / 2
       readonly property real normalBottomY: panel.height - toolbar.height - toolbar.edgeMargin
-      readonly property bool moveToTop: root.hasSelection && root.targetKind === "region" && !root.pickerMode
+      readonly property bool selectionOverlapsBottom: root.hasSelection && root.targetKind === "region" && !root.pickerMode
         && root.selectionX < toolbar.normalX + toolbar.width
         && root.selectionX + root.selectionW > toolbar.normalX
         && root.selectionY < toolbar.normalBottomY + toolbar.height
         && root.selectionY + root.selectionH > toolbar.normalBottomY
+      readonly property bool measurementToolsOverlapBottom: regionMeasurementControls.visible
+        && regionMeasurementControls.x < toolbar.normalX + toolbar.width
+        && regionMeasurementControls.x + regionMeasurementControls.width > toolbar.normalX
+        && regionMeasurementControls.y < toolbar.normalBottomY + toolbar.height
+        && regionMeasurementControls.y + regionMeasurementControls.height > toolbar.normalBottomY
+      readonly property bool moveToTop: selectionOverlapsBottom || measurementToolsOverlapBottom
       readonly property real naturalContentWidth: {
         var items = content.visibleChildren
         var total = 0
@@ -1481,6 +2123,14 @@ Item {
         }
 
         GroupGap {}
+
+        MenuButton {
+          id: measurementModeButton
+          labelText: "Measure"
+          checked: root.measurementMode
+          tooltipText: root.measurementMode ? "Measurement mode: On" : "Measurement mode: Off"
+          onClicked: root.toggleMeasurementMode()
+        }
 
         MenuButton {
           iconText: "󰆿"

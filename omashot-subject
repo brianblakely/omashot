@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+geometry="${1:-}"
+logical_width="${2:-}"
+logical_height="${3:-}"
+
+fail() {
+  printf 'omashot-subject: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ $geometry =~ ^-?[0-9]+,-?[0-9]+[[:space:]][1-9][0-9]*x[1-9][0-9]*$ ]] ||
+  fail "invalid capture geometry"
+[[ $logical_width =~ ^[1-9][0-9]*$ && $logical_height =~ ^[1-9][0-9]*$ ]] ||
+  fail "invalid logical dimensions"
+((logical_width <= 32768 && logical_height <= 32768)) || fail "dimensions are too large"
+
+command -v grim >/dev/null 2>&1 || fail "grim is required"
+command -v magick >/dev/null 2>&1 || fail "ImageMagick is required"
+
+scan_tmp_root="${TMPDIR:-/tmp}"
+[[ -d $scan_tmp_root ]] || fail "temporary directory is unavailable"
+capture_file=$(mktemp --tmpdir="$scan_tmp_root" omashot-subject-capture.XXXXXX.png)
+normalized_file=$(mktemp --tmpdir="$scan_tmp_root" omashot-subject-normalized.XXXXXX.png)
+
+cleanup() {
+  rm -f -- "$capture_file" "$normalized_file"
+}
+trap cleanup EXIT
+
+grim -l 0 -g "$geometry" "$capture_file"
+magick "$capture_file" -alpha off "$normalized_file"
+
+read -r capture_width capture_height < <(
+  magick "$normalized_file" -format '%w %h\n' info:
+)
+[[ $capture_width =~ ^[1-9][0-9]*$ && $capture_height =~ ^[1-9][0-9]*$ ]] ||
+  fail "could not determine captured pixel dimensions"
+
+mapfile -t corner_colors < <(magick "$normalized_file" -format \
+  "%[hex:p{0,0}]\n%[hex:p{$((capture_width - 1)),0}]\n%[hex:p{0,$((capture_height - 1))}]\n%[hex:p{$((capture_width - 1)),$((capture_height - 1))}]\n" info:)
+
+((${#corner_colors[@]} == 4)) || fail "could not sample the capture"
+background_color="${corner_colors[0]}"
+best_count=0
+for candidate in "${corner_colors[@]}"; do
+  count=0
+  for color in "${corner_colors[@]}"; do
+    [[ $color == "$candidate" ]] && ((count += 1))
+  done
+  if ((count > best_count)); then
+    background_color="$candidate"
+    best_count=$count
+  fi
+done
+
+read -r subject_width subject_height subject_page_x subject_page_y < <(
+  magick -quiet "$normalized_file" -bordercolor "#$background_color" -border 1x1 \
+    -fuzz 8% -trim -format '%w %h %[fx:page.x] %[fx:page.y]\n' info:
+)
+
+[[ $subject_width =~ ^[0-9]+$ && $subject_height =~ ^[0-9]+$ \
+  && $subject_page_x =~ ^-?[0-9]+$ && $subject_page_y =~ ^-?[0-9]+$ ]] ||
+  fail "could not determine subject bounds"
+
+# The temporary one-pixel border makes a fully uniform capture trim to a
+# synthetic pixel at -1,-1. It also shifts real content by one pixel.
+if ((subject_page_x < 1 || subject_page_y < 1)); then
+  printf 'null\n'
+  exit 0
+fi
+
+subject_pixel_x=$((subject_page_x - 1))
+subject_pixel_y=$((subject_page_y - 1))
+((subject_pixel_x + subject_width <= capture_width)) ||
+  subject_width=$((capture_width - subject_pixel_x))
+((subject_pixel_y + subject_height <= capture_height)) ||
+  subject_height=$((capture_height - subject_pixel_y))
+
+((subject_width > 0 && subject_height > 0)) || {
+  printf 'null\n'
+  exit 0
+}
+
+subject_x=$((subject_pixel_x * logical_width / capture_width))
+subject_y=$((subject_pixel_y * logical_height / capture_height))
+subject_right=$(((subject_pixel_x + subject_width) * logical_width + capture_width - 1))
+subject_right=$((subject_right / capture_width))
+subject_bottom=$(((subject_pixel_y + subject_height) * logical_height + capture_height - 1))
+subject_bottom=$((subject_bottom / capture_height))
+subject_logical_width=$((subject_right - subject_x))
+subject_logical_height=$((subject_bottom - subject_y))
+
+printf '{"x":%d,"y":%d,"width":%d,"height":%d,' \
+  "$subject_x" "$subject_y" "$subject_logical_width" "$subject_logical_height"
+printf '"pixelX":%d,"pixelY":%d,"pixelWidth":%d,"pixelHeight":%d,' \
+  "$subject_pixel_x" "$subject_pixel_y" "$subject_width" "$subject_height"
+printf '"captureWidth":%d,"captureHeight":%d}\n' "$capture_width" "$capture_height"

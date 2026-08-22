@@ -26,6 +26,10 @@ omarchy plugin add https://github.com/brianblakely/omashot.git
 * Click a window to capture it.
 * Click and drag to create a capture region. Then press `Enter`.
 
+### Measure a Region
+
+Turn on `Measure` in the toolbar to add cursor crosshairs and live pixel dimensions. After drawing a region, you can constrain it to `1:1`, `16:9`, `16:10`, `21:9`, or `4:3`, show the detected subject's margins, or use `Auto-fit` to shrink the region to that subject.
+
 ### Quick Capture Hotkeys
 
 * Press `Space` to capture the whole screen at any time.
