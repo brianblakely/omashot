@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls as Controls
+import QtQuick.Effects
 import QtQuick.Window
 import Quickshell
 import Quickshell.Io
@@ -82,11 +83,11 @@ Item {
     { value: "recording", label: "Recording", icon: screenRecordingIcon }
   ]
   readonly property var aspectRatios: [
-    { value: "1:1", label: "1:1", ratio: 1 },
-    { value: "16:9", label: "16:9", ratio: 16 / 9 },
-    { value: "16:10", label: "16:10", ratio: 16 / 10 },
-    { value: "21:9", label: "21:9", ratio: 21 / 9 },
-    { value: "4:3", label: "4:3", ratio: 4 / 3 }
+    { value: "1:1", icon: Qt.resolvedUrl("assets/aspect-ratio-1-1.svg"), ratio: 1 },
+    { value: "16:9", icon: Qt.resolvedUrl("assets/aspect-ratio-16-9.svg"), ratio: 16 / 9 },
+    { value: "16:10", icon: Qt.resolvedUrl("assets/aspect-ratio-16-10.svg"), ratio: 16 / 10 },
+    { value: "21:9", icon: Qt.resolvedUrl("assets/aspect-ratio-21-9.svg"), ratio: 21 / 9 },
+    { value: "4:3", icon: Qt.resolvedUrl("assets/aspect-ratio-4-3.svg"), ratio: 4 / 3 }
   ]
 
   readonly property bool recordingMode: captureKind === "recording"
@@ -1136,6 +1137,7 @@ Item {
     id: menuButton
 
     property string iconText: ""
+    property url iconSource: ""
     property string labelText: ""
     property string tooltipText: ""
     property bool checked: false
@@ -1146,6 +1148,9 @@ Item {
     readonly property color activeText: Color.menu.selectedText
     readonly property color idleText: Color.menu.text
     readonly property color ctaColor: Color.accent
+    readonly property bool hasSvgIcon: String(iconSource) !== ""
+    readonly property real iconExtent: Style.font.icon
+    readonly property color iconColor: cta ? idleText : (checked ? activeText : idleText)
     readonly property color selectedBorder: Color.menu.selectedBorder.a > 0
       ? Color.menu.selectedBorder
       : Style.selectedBorderFor(idleText, activeText)
@@ -1179,13 +1184,44 @@ Item {
       anchors.centerIn: parent
       spacing: Style.spacing.controlGap
 
-      Text {
-        visible: menuButton.iconText !== ""
+      Item {
+        id: buttonIcon
+        visible: menuButton.iconText !== "" || menuButton.hasSvgIcon
+        width: menuButton.iconExtent
+        height: menuButton.iconExtent
         anchors.verticalCenter: parent.verticalCenter
-        text: menuButton.iconText
-        color: menuButton.cta ? menuButton.idleText : (menuButton.checked ? menuButton.activeText : menuButton.idleText)
-        font.family: Style.font.menuFamily
-        font.pixelSize: Style.font.icon
+
+        Text {
+          anchors.fill: parent
+          visible: menuButton.iconText !== "" && !menuButton.hasSvgIcon
+          text: menuButton.iconText
+          color: menuButton.iconColor
+          font.family: Style.font.menuFamily
+          font.pixelSize: Style.font.icon
+          horizontalAlignment: Text.AlignHCenter
+          verticalAlignment: Text.AlignVCenter
+        }
+
+        Image {
+          id: buttonSvgIcon
+          anchors.fill: parent
+          visible: false
+          source: menuButton.iconSource
+          fillMode: Image.PreserveAspectFit
+          smooth: true
+          mipmap: true
+          sourceSize.width: Math.round(width * Screen.devicePixelRatio)
+          sourceSize.height: Math.round(height * Screen.devicePixelRatio)
+          layer.enabled: menuButton.hasSvgIcon
+        }
+
+        MultiEffect {
+          anchors.fill: buttonSvgIcon
+          source: buttonSvgIcon
+          visible: menuButton.hasSvgIcon
+          colorization: 1.0
+          colorizationColor: menuButton.iconColor
+        }
       }
 
       Text {
@@ -2066,7 +2102,7 @@ Item {
 
             MenuButton {
               required property var modelData
-              labelText: String(modelData.label || "")
+              iconSource: modelData.icon
               checked: root.selectedAspectRatio === String(modelData.value || "")
               onClicked: root.toggleAspectRatio(modelData.value, selectionLayer.width, selectionLayer.height)
             }

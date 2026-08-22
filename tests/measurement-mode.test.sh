@@ -6,6 +6,7 @@ PLUGIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 OVERLAY="$PLUGIN_DIR/Overlay.qml"
 SERVICE="$PLUGIN_DIR/Service.qml"
 SUBJECT_HELPER="$PLUGIN_DIR/omashot-subject"
+ASSET_DIR="$PLUGIN_DIR/assets"
 TEST_ROOT=$(mktemp -d)
 STUB_BIN="$TEST_ROOT/bin"
 
@@ -115,6 +116,34 @@ assert_contains '? root.selectionY + root.selectionH + lowerKnobClearance' \
 ratio_options=$(sed -n '/readonly property var aspectRatios:/,/^  ]/p' "$OVERLAY")
 ratio_count=$(rg --count 'value: "(1:1|16:9|16:10|21:9|4:3)"' <<<"$ratio_options")
 [[ $ratio_count == 5 ]] || fail "the five requested aspect ratios are not all available"
+for ratio_icon in aspect-ratio-1-1.svg aspect-ratio-16-9.svg aspect-ratio-16-10.svg \
+    aspect-ratio-21-9.svg aspect-ratio-4-3.svg; do
+  icon_path="$ASSET_DIR/$ratio_icon"
+  [[ -f $icon_path ]] || fail "the $ratio_icon aspect-ratio glyph is missing"
+  magick identify "$icon_path" >/dev/null || fail "the $ratio_icon aspect-ratio glyph is invalid SVG"
+  rg --fixed-strings --quiet -- 'width="24" height="24" viewBox="0 0 24 24"' "$icon_path" ||
+    fail "the $ratio_icon aspect-ratio glyph does not use a square canvas"
+  if rg --quiet -- '<text' "$icon_path"; then
+    fail "the $ratio_icon aspect-ratio glyph still delegates rendering to plain text"
+  fi
+done
+assert_contains 'property url iconSource: ""' \
+  "menu buttons cannot render SVG glyphs"
+assert_contains 'readonly property real iconExtent: Style.font.icon' \
+  "SVG and Nerd Font glyphs do not share the same rendered width"
+assert_contains 'width: menuButton.iconExtent' \
+  "menu button glyphs do not use the shared icon width"
+assert_contains 'height: menuButton.iconExtent' \
+  "menu button glyphs do not use a square icon slot"
+assert_contains 'colorizationColor: menuButton.iconColor' \
+  "SVG aspect-ratio glyphs do not follow the toolbar text color"
+assert_contains 'iconSource: modelData.icon' \
+  "aspect-ratio buttons do not use their SVG glyphs"
+
+measurement_controls=$(sed -n '/id: regionMeasurementControls/,/^      }/p' "$OVERLAY")
+if rg --fixed-strings --quiet -- 'labelText: String(modelData.label || "")' <<<"$measurement_controls"; then
+  fail "aspect-ratio buttons still render plain-text labels"
+fi
 assert_contains 'function setAspectSelectionFromAnchor(' \
   "drawing does not honor the selected aspect ratio"
 assert_contains 'function resizeSelectionWithAspect(' \
