@@ -116,8 +116,11 @@ assert_contains '? root.selectionY + root.selectionH + lowerKnobClearance' \
 ratio_options=$(sed -n '/readonly property var aspectRatios:/,/^  ]/p' "$OVERLAY")
 ratio_count=$(rg --count 'value: "(1:1|16:9|16:10|21:9|4:3)"' <<<"$ratio_options")
 [[ $ratio_count == 5 ]] || fail "the five requested aspect ratios are not all available"
-for ratio_icon in aspect-ratio-1-1.svg aspect-ratio-16-9.svg aspect-ratio-16-10.svg \
-    aspect-ratio-21-9.svg aspect-ratio-4-3.svg; do
+for ratio_spec in 'aspect-ratio-1-1.svg:1:1' 'aspect-ratio-16-9.svg:16:9' \
+    'aspect-ratio-16-10.svg:16:10' 'aspect-ratio-21-9.svg:21:9' \
+    'aspect-ratio-4-3.svg:4:3'; do
+  ratio_icon=${ratio_spec%%:*}
+  expected_ratio=${ratio_spec#*:}
   icon_path="$ASSET_DIR/$ratio_icon"
   [[ -f $icon_path ]] || fail "the $ratio_icon aspect-ratio glyph is missing"
   magick identify "$icon_path" >/dev/null || fail "the $ratio_icon aspect-ratio glyph is invalid SVG"
@@ -126,6 +129,13 @@ for ratio_icon in aspect-ratio-1-1.svg aspect-ratio-16-9.svg aspect-ratio-16-10.
   if rg --quiet -- '<text' "$icon_path"; then
     fail "the $ratio_icon aspect-ratio glyph still delegates rendering to plain text"
   fi
+  if rg --quiet -- '<rect' "$icon_path"; then
+    fail "the $ratio_icon aspect-ratio glyph is still a generic ratio silhouette"
+  fi
+  rendered_ratio=$(rg -o 'xlink:href="#glyph-(colon|[0-9])"' "$icon_path" \
+    | sed -E 's/.*#glyph-([^" ]+).*/\1/' | sed 's/colon/:/' | tr -d '\n')
+  [[ $rendered_ratio == "$expected_ratio" ]] ||
+    fail "the $ratio_icon glyph renders $rendered_ratio instead of $expected_ratio"
 done
 assert_contains 'property url iconSource: ""' \
   "menu buttons cannot render SVG glyphs"
