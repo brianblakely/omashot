@@ -7,6 +7,10 @@ OVERLAY="$PLUGIN_DIR/Overlay.qml"
 SERVICE="$PLUGIN_DIR/Service.qml"
 SUBJECT_HELPER="$PLUGIN_DIR/omashot-subject"
 ASSET_DIR="$PLUGIN_DIR/assets"
+SVG_TO_QML=$(command -v svgtoqml 2>/dev/null || true)
+if [[ -z $SVG_TO_QML && -x /usr/lib/qt6/bin/svgtoqml ]]; then
+  SVG_TO_QML=/usr/lib/qt6/bin/svgtoqml
+fi
 TEST_ROOT=$(mktemp -d)
 STUB_BIN="$TEST_ROOT/bin"
 
@@ -132,10 +136,23 @@ for ratio_spec in 'aspect-ratio-1-1.svg:1:1' 'aspect-ratio-16-9.svg:16:9' \
   if rg --quiet -- '<rect' "$icon_path"; then
     fail "the $ratio_icon aspect-ratio glyph is still a generic ratio silhouette"
   fi
-  rendered_ratio=$(rg -o 'xlink:href="#glyph-(colon|[0-9])"' "$icon_path" \
-    | sed -E 's/.*#glyph-([^" ]+).*/\1/' | sed 's/colon/:/' | tr -d '\n')
+  if rg --quiet -- '<(defs|use)([ >])' "$icon_path"; then
+    fail "the $ratio_icon glyph uses SVG references that Qt leaves blank"
+  fi
+  rendered_ratio=$(rg -o 'data-glyph="[^"]+"' "$icon_path" \
+    | sed -E 's/data-glyph="([^"]+)"/\1/' | tr -d '\n')
   [[ $rendered_ratio == "$expected_ratio" ]] ||
     fail "the $ratio_icon glyph renders $rendered_ratio instead of $expected_ratio"
+  direct_path_count=$(rg --count '<path data-glyph=' "$icon_path")
+  [[ $direct_path_count == ${#expected_ratio} ]] ||
+    fail "the $ratio_icon glyph does not contain one direct path per character"
+  if [[ -n $SVG_TO_QML ]]; then
+    qt_render="$TEST_ROOT/${ratio_icon%.svg}.qml"
+    "$SVG_TO_QML" "$icon_path" "$qt_render"
+    qt_path_count=$(rg --count 'ShapePath \{' "$qt_render" || true)
+    [[ $qt_path_count == ${#expected_ratio} ]] ||
+      fail "Qt renders the $ratio_icon glyph as blank"
+  fi
 done
 assert_contains 'property url iconSource: ""' \
   "menu buttons cannot render SVG glyphs"
