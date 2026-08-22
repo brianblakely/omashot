@@ -52,8 +52,6 @@ Item {
   property var pickerMonitors: []
   property bool measurementMode: false
   property bool measurementPointerActive: false
-  property real measurementPointerX: 0
-  property real measurementPointerY: 0
   property string selectedAspectRatio: ""
   property bool marginMeasurements: false
   property var subjectBounds: null
@@ -71,6 +69,9 @@ Item {
   readonly property string screenRecordingIcon: "󰻂" // Omarchy bar recording indicator
   readonly property string recordingPlayIcon: "" // nf-fa-circle_play
   readonly property string recordingStopIcon: "" // nf-fa-circle_stop
+  readonly property string measurementIcon: "󰑭" // nf-md-ruler
+  readonly property string marginMeasurementIcon: "󰍓" // nf-md-margin
+  readonly property string autoFitIcon: "󱣴" // nf-md-fit_to_screen
 
   readonly property var captureKinds: [
     { value: "screenshot", label: "Screenshot", icon: "" },
@@ -99,14 +100,18 @@ Item {
   readonly property real pointerDragThreshold: Style.space(20)
   readonly property real topEdgeTargetHeight: Math.max(1, Style.space(4))
   readonly property real regionBorderWidth: Math.max(1, Style.normalBorderWidth)
+  readonly property real resizeHandleSize: Math.max(10, Style.space(10))
+  readonly property real marginLabelClearance: resizeHandleSize + Style.spacing.xs
   readonly property bool subjectBoundsValid: subjectBounds !== null
     && Number(subjectBounds.width) > 0 && Number(subjectBounds.height) > 0
+  readonly property int subjectWidth: subjectBoundsValid ? Math.round(Number(subjectBounds.width)) : 0
+  readonly property int subjectHeight: subjectBoundsValid ? Math.round(Number(subjectBounds.height)) : 0
   readonly property int subjectMarginLeft: subjectBoundsValid ? Math.max(0, Math.round(Number(subjectBounds.x))) : 0
   readonly property int subjectMarginTop: subjectBoundsValid ? Math.max(0, Math.round(Number(subjectBounds.y))) : 0
   readonly property int subjectMarginRight: subjectBoundsValid
-    ? Math.max(0, selectionW - subjectMarginLeft - Math.round(Number(subjectBounds.width))) : 0
+    ? Math.max(0, selectionW - subjectMarginLeft - subjectWidth) : 0
   readonly property int subjectMarginBottom: subjectBoundsValid
-    ? Math.max(0, selectionH - subjectMarginTop - Math.round(Number(subjectBounds.height))) : 0
+    ? Math.max(0, selectionH - subjectMarginTop - subjectHeight) : 0
   readonly property real measurementScale: captureScale()
   readonly property int selectionPixelWidth: Math.max(1, Math.round(selectionW * measurementScale))
   readonly property int selectionPixelHeight: Math.max(1, Math.round(selectionH * measurementScale))
@@ -316,17 +321,6 @@ Item {
     subjectScanAction = ""
     queuedSubjectScanAction = ""
     if (subjectScanProc.running) subjectScanProc.running = false
-  }
-
-  function updateMeasurementPointer(x, y, active) {
-    if (!measurementMode || subjectScanPending || recordingPresentation) {
-      measurementPointerActive = false
-      return
-    }
-
-    measurementPointerX = clamp(x, 0, panel.width)
-    measurementPointerY = clamp(y, 0, panel.height)
-    measurementPointerActive = active !== false
   }
 
   function aspectRatioValue(value) {
@@ -1224,6 +1218,70 @@ Item {
     }
   }
 
+  component MarginValueLabel: Item {
+    id: marginValueLabel
+
+    property string labelText: ""
+    readonly property real outlinePadding: Math.max(2, Style.normalBorderWidth * 2)
+
+    implicitWidth: marginValueText.implicitWidth + outlinePadding
+    implicitHeight: marginValueText.implicitHeight + outlinePadding
+    width: implicitWidth
+    height: implicitHeight
+
+    Text {
+      id: marginValueText
+      anchors.centerIn: parent
+      text: marginValueLabel.labelText
+      color: Color.menu.text
+      style: Text.Outline
+      styleColor: Color.menu.background
+      font.family: Style.font.menuFamily
+      font.pixelSize: Style.font.bodySmall
+      font.weight: Font.DemiBold
+    }
+  }
+
+  component MarginDimensionLine: Item {
+    id: marginLine
+
+    property bool vertical: false
+    property real span: 0
+    readonly property real stroke: Math.max(1, Style.normalBorderWidth)
+    readonly property real capLength: Math.max(Style.space(8), stroke * 5)
+
+    width: vertical ? capLength : span
+    height: vertical ? span : capLength
+    opacity: 0.78
+
+    Rectangle {
+      id: dimensionStroke
+      x: marginLine.vertical ? (marginLine.width - width) / 2 : 0
+      y: marginLine.vertical ? 0 : (marginLine.height - height) / 2
+      width: marginLine.vertical ? marginLine.stroke : marginLine.span
+      height: marginLine.vertical ? marginLine.span : marginLine.stroke
+      color: Color.accent
+    }
+
+    Rectangle {
+      id: startCap
+      x: marginLine.vertical ? 0 : -marginLine.stroke / 2
+      y: marginLine.vertical ? -marginLine.stroke / 2 : 0
+      width: marginLine.vertical ? marginLine.capLength : marginLine.stroke
+      height: marginLine.vertical ? marginLine.stroke : marginLine.capLength
+      color: Color.accent
+    }
+
+    Rectangle {
+      id: endCap
+      x: marginLine.vertical ? 0 : marginLine.span - marginLine.stroke / 2
+      y: marginLine.vertical ? marginLine.span - marginLine.stroke / 2 : 0
+      width: marginLine.vertical ? marginLine.capLength : marginLine.stroke
+      height: marginLine.vertical ? marginLine.stroke : marginLine.capLength
+      color: Color.accent
+    }
+  }
+
   component IconDropdown: Rectangle {
     id: iconDropdown
 
@@ -1595,7 +1653,7 @@ Item {
       readonly property bool onTop: edge.indexOf("n") >= 0
       readonly property bool onBottom: edge.indexOf("s") >= 0
 
-      width: Math.max(10, Style.space(10))
+      width: root.resizeHandleSize
       height: width
       x: onLeft ? -width + root.regionBorderWidth
         : onRight ? parent.width - root.regionBorderWidth
@@ -1613,7 +1671,7 @@ Item {
         anchors.fill: parent
         enabled: root.pointerAction === ""
         hoverEnabled: true
-        cursorShape: parent.cursor
+        cursorShape: root.measurementMode ? Qt.BlankCursor : parent.cursor
         acceptedButtons: Qt.LeftButton
         onPressed: function(mouse) {
           var point = mapToItem(selectionLayer, mouse.x, mouse.y)
@@ -1625,13 +1683,10 @@ Item {
         }
         onPositionChanged: function(mouse) {
           var point = mapToItem(selectionLayer, mouse.x, mouse.y)
-          root.updateMeasurementPointer(point.x, point.y, true)
+          root.measurementPointerActive = root.measurementMode
           root.updatePointer(point.x, point.y, selectionLayer.width, selectionLayer.height)
         }
-        onEntered: {
-          var point = mapToItem(selectionLayer, mouseX, mouseY)
-          root.updateMeasurementPointer(point.x, point.y, true)
-        }
+        onEntered: root.measurementPointerActive = root.measurementMode
         onExited: root.measurementPointerActive = false
         onReleased: root.finishPointer()
       }
@@ -1641,6 +1696,27 @@ Item {
       id: selectionLayer
       anchors.fill: parent
       visible: root.regionEditor
+
+      readonly property real livePointerX: measurementPress.active
+        ? measurementPress.point.position.x : measurementHover.point.position.x
+      readonly property real livePointerY: measurementPress.active
+        ? measurementPress.point.position.y : measurementHover.point.position.y
+
+      HoverHandler {
+        id: measurementHover
+        enabled: root.measurementMode && !root.subjectScanPending && !root.recordingPresentation
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+        blocking: false
+        target: null
+      }
+
+      PointHandler {
+        id: measurementPress
+        enabled: measurementHover.enabled
+        acceptedButtons: Qt.LeftButton
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+        target: null
+      }
 
       Rectangle {
         anchors.fill: parent
@@ -1687,7 +1763,7 @@ Item {
       Rectangle {
         id: horizontalMeasurementGuide
         x: 0
-        y: Math.round(root.measurementPointerY - height / 2)
+        y: Math.round(selectionLayer.livePointerY - height / 2)
         width: parent.width
         height: Math.max(1, root.regionBorderWidth)
         visible: root.measurementMode && root.measurementPointerActive
@@ -1699,7 +1775,7 @@ Item {
 
       Rectangle {
         id: verticalMeasurementGuide
-        x: Math.round(root.measurementPointerX - width / 2)
+        x: Math.round(selectionLayer.livePointerX - width / 2)
         y: 0
         width: Math.max(1, root.regionBorderWidth)
         height: parent.height
@@ -1712,11 +1788,11 @@ Item {
       MouseArea {
         id: selectionPointer
         anchors.fill: parent
-        cursorShape: Qt.CrossCursor
+        cursorShape: root.measurementMode ? Qt.BlankCursor : Qt.CrossCursor
         acceptedButtons: Qt.LeftButton
         hoverEnabled: root.targetDiscoveryMode || root.measurementMode
         preventStealing: true
-        onEntered: root.updateMeasurementPointer(mouseX, mouseY, true)
+        onEntered: root.measurementPointerActive = root.measurementMode
         onExited: root.measurementPointerActive = false
         onPressed: function(mouse) {
           keyCatcher.forceActiveFocus()
@@ -1724,7 +1800,7 @@ Item {
           mouse.accepted = true
         }
         onPositionChanged: function(mouse) {
-          root.updateMeasurementPointer(mouse.x, mouse.y, true)
+          root.measurementPointerActive = root.measurementMode
           if (root.pointerAction !== "") root.updatePointer(mouse.x, mouse.y, selectionLayer.width, selectionLayer.height)
           else root.updateTargetHover(mouse.x, mouse.y, selectionLayer.width, selectionLayer.height, panel.currentScreenName)
         }
@@ -1752,7 +1828,7 @@ Item {
           anchors.fill: parent
           enabled: root.pointerAction === ""
           hoverEnabled: root.measurementMode
-          cursorShape: Qt.SizeAllCursor
+          cursorShape: root.measurementMode ? Qt.BlankCursor : Qt.SizeAllCursor
           acceptedButtons: Qt.LeftButton
           preventStealing: true
           onPressed: function(mouse) {
@@ -1765,13 +1841,10 @@ Item {
           }
           onPositionChanged: function(mouse) {
             var point = mapToItem(selectionLayer, mouse.x, mouse.y)
-            root.updateMeasurementPointer(point.x, point.y, true)
+            root.measurementPointerActive = root.measurementMode
             root.updatePointer(point.x, point.y, selectionLayer.width, selectionLayer.height)
           }
-          onEntered: {
-            var point = mapToItem(selectionLayer, mouseX, mouseY)
-            root.updateMeasurementPointer(point.x, point.y, true)
-          }
+          onEntered: root.measurementPointerActive = root.measurementMode
           onExited: root.measurementPointerActive = false
           onReleased: root.finishRegionPointer(selectionLayer.width, selectionLayer.height)
         }
@@ -1817,79 +1890,110 @@ Item {
         }
       }
 
-      Rectangle {
-        id: detectedSubjectFrame
-        x: root.selectionX + root.subjectMarginLeft
-        y: root.selectionY + root.subjectMarginTop
-        width: root.subjectBoundsValid ? Math.round(Number(root.subjectBounds.width)) : 0
-        height: root.subjectBoundsValid ? Math.round(Number(root.subjectBounds.height)) : 0
+      Item {
+        id: subjectMarginIndicators
+        anchors.fill: parent
         visible: root.measurementMode && root.marginMeasurements && root.subjectBoundsValid
           && root.showSelectionFrame && !root.subjectScanPending && root.pointerAction === ""
-        color: "transparent"
-        border.color: Color.accent
-        border.width: Math.max(1, root.regionBorderWidth)
-        opacity: 0.62
         z: 5
+
+        MarginDimensionLine {
+          id: topMarginLine
+          vertical: true
+          span: root.subjectMarginTop
+          x: Math.round(root.selectionX + root.subjectMarginLeft + root.subjectWidth / 2 - width / 2)
+          y: root.selectionY
+          visible: span > 0
+        }
+
+        MarginDimensionLine {
+          id: bottomMarginLine
+          vertical: true
+          span: root.subjectMarginBottom
+          x: Math.round(root.selectionX + root.subjectMarginLeft + root.subjectWidth / 2 - width / 2)
+          y: root.selectionY + root.subjectMarginTop + root.subjectHeight
+          visible: span > 0
+        }
+
+        MarginDimensionLine {
+          id: leftMarginLine
+          span: root.subjectMarginLeft
+          x: root.selectionX
+          y: Math.round(root.selectionY + root.subjectMarginTop + root.subjectHeight / 2 - height / 2)
+          visible: span > 0
+        }
+
+        MarginDimensionLine {
+          id: rightMarginLine
+          span: root.subjectMarginRight
+          x: root.selectionX + root.subjectMarginLeft + root.subjectWidth
+          y: Math.round(root.selectionY + root.subjectMarginTop + root.subjectHeight / 2 - height / 2)
+          visible: span > 0
+        }
       }
 
-      MeasurementBadge {
+      MarginValueLabel {
         id: topMarginBadge
-        readonly property real gap: Style.spacing.xs
         labelText: String(root.subjectPixelMarginTop)
-        x: root.clamp(root.selectionX + root.selectionW / 2 - width / 2, 0, selectionLayer.width - width)
-        y: root.selectionY >= height + gap
-          ? root.selectionY - height - gap
-          : root.selectionY + gap
-        visible: detectedSubjectFrame.visible
+        x: root.clamp(root.selectionX + root.subjectMarginLeft + root.subjectWidth / 2 - width / 2,
+          0, selectionLayer.width - width)
+        y: root.selectionY >= height + root.marginLabelClearance
+          ? root.selectionY - height - root.marginLabelClearance
+          : Math.min(selectionLayer.height - height, root.selectionY + root.marginLabelClearance)
+        visible: subjectMarginIndicators.visible
         z: 6
       }
 
-      MeasurementBadge {
+      MarginValueLabel {
         id: bottomMarginBadge
-        readonly property real gap: Style.spacing.xs
         labelText: String(root.subjectPixelMarginBottom)
-        x: root.clamp(root.selectionX + root.selectionW / 2 - width / 2, 0, selectionLayer.width - width)
-        y: root.selectionY + root.selectionH + height + gap <= selectionLayer.height
-          ? root.selectionY + root.selectionH + gap
-          : root.selectionY + root.selectionH - height - gap
-        visible: detectedSubjectFrame.visible
+        x: root.clamp(root.selectionX + root.subjectMarginLeft + root.subjectWidth / 2 - width / 2,
+          0, selectionLayer.width - width)
+        y: root.selectionY + root.selectionH + height + root.marginLabelClearance <= selectionLayer.height
+          ? root.selectionY + root.selectionH + root.marginLabelClearance
+          : Math.max(0, root.selectionY + root.selectionH - height - root.marginLabelClearance)
+        visible: subjectMarginIndicators.visible
         z: 6
       }
 
-      MeasurementBadge {
+      MarginValueLabel {
         id: leftMarginBadge
-        readonly property real gap: Style.spacing.xs
         labelText: String(root.subjectPixelMarginLeft)
-        x: root.selectionX >= width + gap
-          ? root.selectionX - width - gap
-          : root.selectionX + gap
-        y: root.clamp(root.selectionY + root.selectionH / 2 - height / 2, 0, selectionLayer.height - height)
-        visible: detectedSubjectFrame.visible
+        x: root.selectionX >= width + root.marginLabelClearance
+          ? root.selectionX - width - root.marginLabelClearance
+          : Math.min(selectionLayer.width - width, root.selectionX + root.marginLabelClearance)
+        y: root.clamp(root.selectionY + root.subjectMarginTop + root.subjectHeight / 2 - height / 2,
+          0, selectionLayer.height - height)
+        visible: subjectMarginIndicators.visible
         z: 6
       }
 
-      MeasurementBadge {
+      MarginValueLabel {
         id: rightMarginBadge
-        readonly property real gap: Style.spacing.xs
         labelText: String(root.subjectPixelMarginRight)
-        x: root.selectionX + root.selectionW + width + gap <= selectionLayer.width
-          ? root.selectionX + root.selectionW + gap
-          : root.selectionX + root.selectionW - width - gap
-        y: root.clamp(root.selectionY + root.selectionH / 2 - height / 2, 0, selectionLayer.height - height)
-        visible: detectedSubjectFrame.visible
+        x: root.selectionX + root.selectionW + width + root.marginLabelClearance <= selectionLayer.width
+          ? root.selectionX + root.selectionW + root.marginLabelClearance
+          : Math.max(0, root.selectionX + root.selectionW - width - root.marginLabelClearance)
+        y: root.clamp(root.selectionY + root.subjectMarginTop + root.subjectHeight / 2 - height / 2,
+          0, selectionLayer.height - height)
+        visible: subjectMarginIndicators.visible
         z: 6
       }
 
       MeasurementBadge {
         id: selectionDimensions
         readonly property real gap: Style.spacing.sm
-        readonly property bool placeBelow: root.selectionY + root.selectionH + height
-          + regionMeasurementControls.height + gap * 3 <= selectionLayer.height
+        readonly property real lowerKnobClearance: root.resizeHandleSize + gap
+        readonly property real lowerRightX: root.selectionX + root.selectionW + lowerKnobClearance
+        readonly property real lowerLeftX: root.selectionX - lowerKnobClearance - width
+        readonly property bool placeRight: lowerRightX + width <= selectionLayer.width
+        readonly property bool placeBelow: root.selectionY + root.selectionH + lowerKnobClearance
+          + height + regionMeasurementControls.height + gap * 2 <= selectionLayer.height
         labelText: root.selectionPixelWidth + " × " + root.selectionPixelHeight + " px"
-        x: root.clamp(root.selectionX + root.selectionW - width, 0, selectionLayer.width - width)
+        x: placeRight ? lowerRightX : Math.max(0, lowerLeftX)
         y: placeBelow
-          ? root.selectionY + root.selectionH + gap
-          : Math.max(0, root.selectionY - height - gap)
+          ? root.selectionY + root.selectionH + lowerKnobClearance
+          : Math.max(0, root.selectionY - lowerKnobClearance - height)
         visible: root.measurementMode && root.showSelectionFrame
           && !root.subjectScanPending && !root.recordingPresentation
         z: 7
@@ -1933,20 +2037,21 @@ Item {
               required property var modelData
               labelText: String(modelData.label || "")
               checked: root.selectedAspectRatio === String(modelData.value || "")
-              tooltipText: checked ? "Remove aspect-ratio constraint" : "Constrain region to " + labelText
               onClicked: root.toggleAspectRatio(modelData.value, selectionLayer.width, selectionLayer.height)
             }
           }
 
           MenuButton {
-            labelText: "Margins"
+            id: marginMeasurementsButton
+            iconText: root.marginMeasurementIcon
             checked: root.marginMeasurements
             tooltipText: root.marginMeasurements ? "Hide subject margins" : "Measure subject margins"
             onClicked: root.toggleMarginMeasurements()
           }
 
           MenuButton {
-            labelText: "Auto-fit"
+            id: autoFitButton
+            iconText: root.autoFitIcon
             tooltipText: "Shrink region to detected subject"
             onClicked: root.requestSubjectScan("shrink")
           }
@@ -2126,7 +2231,7 @@ Item {
 
         MenuButton {
           id: measurementModeButton
-          labelText: "Measure"
+          iconText: root.measurementIcon
           checked: root.measurementMode
           tooltipText: root.measurementMode ? "Measurement mode: On" : "Measurement mode: Off"
           onClicked: root.toggleMeasurementMode()

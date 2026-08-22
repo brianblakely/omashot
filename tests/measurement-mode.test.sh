@@ -23,10 +23,23 @@ assert_contains() {
   rg --fixed-strings --quiet -- "$needle" "$OVERLAY" || fail "$message"
 }
 
+assert_absent() {
+  local needle="$1" message="$2"
+  if rg --fixed-strings --quiet -- "$needle" "$OVERLAY"; then
+    fail "$message"
+  fi
+}
+
 assert_contains 'property bool measurementMode: false' \
   "measurement mode state is missing"
 assert_contains 'id: measurementModeButton' \
   "the main toolbar has no measurement toggle"
+assert_contains 'readonly property string measurementIcon: "󰑭" // nf-md-ruler' \
+  "the measurement toggle has no Nerd Font ruler glyph"
+assert_contains 'iconText: root.measurementIcon' \
+  "the measurement toggle does not render its glyph as an icon"
+assert_absent 'labelText: "Measure"' \
+  "the measurement toggle still uses a text label"
 assert_contains 'onClicked: root.toggleMeasurementMode()' \
   "the measurement toggle is not interactive"
 
@@ -40,13 +53,35 @@ assert_contains 'height: parent.height' \
   "the vertical cursor guide is not screen-high"
 assert_contains 'opacity: 0.52' \
   "the cursor guides are not semi-transparent"
+assert_contains 'id: measurementHover' \
+  "the crosshair does not use a passive hover tracker"
+assert_contains 'id: measurementPress' \
+  "the crosshair does not keep tracking during pointer drags"
+assert_contains 'measurementPress.point.position.x : measurementHover.point.position.x' \
+  "the horizontal crosshair position is not bound directly to pointer events"
+assert_contains 'measurementPress.point.position.y : measurementHover.point.position.y' \
+  "the vertical crosshair position is not bound directly to pointer events"
+assert_contains 'root.measurementMode ? Qt.BlankCursor : Qt.CrossCursor' \
+  "the independently composited cursor is still shown over the measurement canvas"
+assert_absent 'function updateMeasurementPointer(' \
+  "crosshair motion still passes through the laggy JavaScript relay"
 
 assert_contains 'id: selectionDimensions' \
   "the region dimension badge is missing"
 assert_contains 'root.selectionPixelWidth + " × " + root.selectionPixelHeight + " px"' \
   "the region dimension badge does not report pixels"
-assert_contains '? root.selectionY + root.selectionH + gap' \
-  "the dimension badge is not placed below the region when space permits"
+assert_contains 'readonly property real lowerKnobClearance: root.resizeHandleSize + gap' \
+  "the dimension badge does not clear the lower resize knobs"
+assert_contains 'readonly property real lowerRightX: root.selectionX + root.selectionW + lowerKnobClearance' \
+  "the dimension badge is not anchored beyond the lower-right knob"
+assert_contains 'readonly property real lowerLeftX: root.selectionX - lowerKnobClearance - width' \
+  "the dimension badge has no lower-left fallback"
+assert_contains 'readonly property bool placeRight: lowerRightX + width <= selectionLayer.width' \
+  "the dimension badge does not detect right-edge overflow"
+assert_contains 'x: placeRight ? lowerRightX : Math.max(0, lowerLeftX)' \
+  "the dimension badge does not flip from lower-right to lower-left"
+assert_contains '? root.selectionY + root.selectionH + lowerKnobClearance' \
+  "the dimension badge is not placed below the lower resize knob"
 
 ratio_options=$(sed -n '/readonly property var aspectRatios:/,/^  ]/p' "$OVERLAY")
 ratio_count=$(rg --count 'value: "(1:1|16:9|16:10|21:9|4:3)"' <<<"$ratio_options")
@@ -57,14 +92,53 @@ assert_contains 'function resizeSelectionWithAspect(' \
   "resize handles do not honor the selected aspect ratio"
 assert_contains 'onClicked: root.toggleAspectRatio(' \
   "the aspect-ratio buttons are not interactive"
+assert_absent 'tooltipText: checked ? "Remove aspect-ratio constraint" : "Constrain region to " + labelText' \
+  "aspect-ratio buttons still show redundant tooltips"
 
 for badge in topMarginBadge rightMarginBadge bottomMarginBadge leftMarginBadge; do
   assert_contains "id: $badge" "the $badge subject-margin label is missing"
 done
+assert_contains 'component MarginValueLabel: Item' \
+  "margin values are still rendered inside a box"
+assert_contains 'style: Text.Outline' \
+  "margin values do not have a text outline"
+assert_contains 'styleColor: Color.menu.background' \
+  "margin value outlines do not use the background color"
+assert_contains 'readonly property real marginLabelClearance: resizeHandleSize + Style.spacing.xs' \
+  "margin values do not clear the resize handles"
+assert_contains 'width: root.resizeHandleSize' \
+  "resize handles do not share their size with margin-label placement"
+assert_contains 'component MarginDimensionLine: Item' \
+  "the reusable capped margin measurement line is missing"
+for line in topMarginLine rightMarginLine bottomMarginLine leftMarginLine; do
+  assert_contains "id: $line" "the $line subject-margin indicator is missing"
+done
+assert_contains 'id: startCap' \
+  "margin measurement lines have no perpendicular starting cap"
+assert_contains 'id: endCap' \
+  "margin measurement lines have no perpendicular ending cap"
+assert_absent 'id: detectedSubjectFrame' \
+  "margin measurement still draws a rectangle around the subject"
 assert_contains 'onClicked: root.toggleMarginMeasurements()' \
   "the subject-margin button is not interactive"
+assert_contains 'id: marginMeasurementsButton' \
+  "the measurement toolbar has no margin button"
+assert_contains 'readonly property string marginMeasurementIcon: "󰍓" // nf-md-margin' \
+  "the margin button has no Nerd Font margin glyph"
+assert_contains 'iconText: root.marginMeasurementIcon' \
+  "the margin button does not use its Nerd Font glyph"
+assert_absent 'labelText: "Margins"' \
+  "the margin button still uses a text label"
 assert_contains 'onClicked: root.requestSubjectScan("shrink")' \
   "the fit-to-subject button is not interactive"
+assert_contains 'id: autoFitButton' \
+  "the measurement toolbar has no auto-fit button"
+assert_contains 'readonly property string autoFitIcon: "󱣴" // nf-md-fit_to_screen' \
+  "the auto-fit button has no Nerd Font fit-to-screen glyph"
+assert_contains 'iconText: root.autoFitIcon' \
+  "the auto-fit button does not use its Nerd Font glyph"
+assert_absent 'labelText: "Auto-fit"' \
+  "the auto-fit button still uses a text label"
 assert_contains 'visible: root.showSelectionFrame && !root.recordingPresentation && !root.subjectScanPending' \
   "selection chrome is not hidden while subject pixels are sampled"
 assert_contains 'visible: !root.pickerMode && !root.recordingPresentation && !root.subjectScanPending' \
