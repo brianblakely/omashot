@@ -6,11 +6,6 @@ PLUGIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 OVERLAY="$PLUGIN_DIR/Overlay.qml"
 SERVICE="$PLUGIN_DIR/Service.qml"
 SUBJECT_HELPER="$PLUGIN_DIR/omashot-subject"
-ASSET_DIR="$PLUGIN_DIR/assets"
-SVG_TO_QML=$(command -v svgtoqml 2>/dev/null || true)
-if [[ -z $SVG_TO_QML && -x /usr/lib/qt6/bin/svgtoqml ]]; then
-  SVG_TO_QML=/usr/lib/qt6/bin/svgtoqml
-fi
 TEST_ROOT=$(mktemp -d)
 STUB_BIN="$TEST_ROOT/bin"
 
@@ -120,59 +115,39 @@ assert_contains '? root.selectionY + root.selectionH + lowerKnobClearance' \
 ratio_options=$(sed -n '/readonly property var aspectRatios:/,/^  ]/p' "$OVERLAY")
 ratio_count=$(rg --count 'value: "(1:1|16:9|16:10|21:9|4:3)"' <<<"$ratio_options")
 [[ $ratio_count == 5 ]] || fail "the five requested aspect ratios are not all available"
-for ratio_spec in 'aspect-ratio-1-1.svg:1:1' 'aspect-ratio-16-9.svg:16:9' \
-    'aspect-ratio-16-10.svg:16:10' 'aspect-ratio-21-9.svg:21:9' \
-    'aspect-ratio-4-3.svg:4:3'; do
-  ratio_icon=${ratio_spec%%:*}
-  expected_ratio=${ratio_spec#*:}
-  icon_path="$ASSET_DIR/$ratio_icon"
-  [[ -f $icon_path ]] || fail "the $ratio_icon aspect-ratio glyph is missing"
-  magick identify "$icon_path" >/dev/null || fail "the $ratio_icon aspect-ratio glyph is invalid SVG"
-  rg --fixed-strings --quiet -- 'width="24" height="24" viewBox="0 0 24 24"' "$icon_path" ||
-    fail "the $ratio_icon aspect-ratio glyph does not use a square canvas"
-  if rg --quiet -- '<rect' "$icon_path"; then
-    fail "the $ratio_icon aspect-ratio glyph is still a generic ratio silhouette"
-  fi
-  if rg --quiet -- '<(defs|use)([ >])' "$icon_path"; then
-    fail "the $ratio_icon glyph uses SVG references that Qt leaves blank"
-  fi
-  text_count=$(rg --count '<text ' "$icon_path")
-  [[ $text_count == 1 ]] || fail "the $ratio_icon glyph does not contain one system-font label"
-  rg --fixed-strings --quiet -- 'font-family="monospace"' "$icon_path" ||
-    fail "the $ratio_icon glyph does not follow the system font"
-  rg --fixed-strings --quiet -- 'font-weight="400"' "$icon_path" ||
-    fail "the $ratio_icon glyph does not match the regular system-font weight"
-  rendered_ratio=$(rg -o '>[^<]+</text>' "$icon_path" \
-    | sed -E 's/^>(.*)<\/text>$/\1/')
-  [[ $rendered_ratio == "$expected_ratio" ]] ||
-    fail "the $ratio_icon glyph renders $rendered_ratio instead of $expected_ratio"
-  if [[ -n $SVG_TO_QML ]]; then
-    qt_render="$TEST_ROOT/${ratio_icon%.svg}.qml"
-    "$SVG_TO_QML" "$icon_path" "$qt_render"
-    qt_text_count=$(rg --count '^[[:space:]]*Text \{' "$qt_render" || true)
-    [[ $qt_text_count == 1 ]] ||
-      fail "Qt renders the $ratio_icon glyph as blank"
-    rg --fixed-strings --quiet -- "$expected_ratio" "$qt_render" ||
-      fail "Qt does not render the expected $expected_ratio label"
-  fi
+for ratio in '1:1' '16:9' '16:10' '21:9' '4:3'; do
+  rg --fixed-strings --quiet -- "value: \"$ratio\", label: \"$ratio\"" <<<"$ratio_options" ||
+    fail "the $ratio aspect-ratio button does not use its literal text label"
 done
-assert_contains 'property url iconSource: ""' \
-  "menu buttons cannot render SVG glyphs"
+for old_icon in aspect-ratio-1-1.svg aspect-ratio-16-9.svg aspect-ratio-16-10.svg \
+    aspect-ratio-21-9.svg aspect-ratio-4-3.svg; do
+  [[ ! -e "$PLUGIN_DIR/assets/$old_icon" ]] ||
+    fail "the obsolete $old_icon asset was not removed"
+done
+assert_absent 'import QtQuick.Effects' \
+  "the removed SVG labels still pull in Qt Quick effects"
+assert_absent 'property url iconSource: ""' \
+  "menu buttons still carry the removed SVG label path"
+assert_absent 'MultiEffect {' \
+  "menu buttons still colorize the removed SVG labels"
 assert_contains 'readonly property real iconExtent: Style.font.icon' \
-  "SVG and Nerd Font glyphs do not share the same rendered width"
+  "Nerd Font toolbar glyphs do not use a consistent rendered width"
 assert_contains 'width: menuButton.iconExtent' \
-  "menu button glyphs do not use the shared icon width"
+  "Nerd Font toolbar glyphs do not use the shared icon width"
 assert_contains 'height: menuButton.iconExtent' \
-  "menu button glyphs do not use a square icon slot"
-assert_contains 'colorizationColor: menuButton.iconColor' \
-  "SVG aspect-ratio glyphs do not follow the toolbar text color"
-assert_contains 'iconSource: modelData.icon' \
-  "aspect-ratio buttons do not use their SVG glyphs"
+  "Nerd Font toolbar glyphs do not use a square icon slot"
+assert_contains 'property bool square: false' \
+  "menu buttons cannot opt into a square text-label layout"
+assert_contains 'implicitWidth: square || labelText === ""' \
+  "square text buttons are not constrained to the control height"
+assert_contains 'fontSizeMode: menuButton.square ? Text.Fit : Text.FixedSize' \
+  "long aspect-ratio labels do not fit inside their square buttons"
 
 measurement_controls=$(sed -n '/id: regionMeasurementControls/,/^      }/p' "$OVERLAY")
-if rg --fixed-strings --quiet -- 'labelText: String(modelData.label || "")' <<<"$measurement_controls"; then
-  fail "aspect-ratio buttons still render plain-text labels"
-fi
+rg --fixed-strings --quiet -- 'labelText: String(modelData.label || "")' <<<"$measurement_controls" ||
+  fail "aspect-ratio buttons do not render their plain-text labels"
+rg --fixed-strings --quiet -- 'square: true' <<<"$measurement_controls" ||
+  fail "aspect-ratio buttons are not square"
 assert_contains 'function setAspectSelectionFromAnchor(' \
   "drawing does not honor the selected aspect ratio"
 assert_contains 'function resizeSelectionWithAspect(' \
