@@ -631,6 +631,21 @@ recording_active() {
   pgrep -f "^gpu-screen-recorder" >/dev/null 2>&1
 }
 
+publish_recording_filename() {
+  local filename="$1" marker_tmp
+
+  # The Omarchy recorder expects this fixed marker path.  Never redirect into
+  # it directly: another local user could pre-place a symlink and make the
+  # redirect truncate its target.  Build a private file beside the marker and
+  # atomically replace the directory entry instead.
+  marker_tmp=$(mktemp -- "${RECORDING_FILE}.XXXXXX") || return 1
+  if ! printf '%s\n' "$filename" >"$marker_tmp" ||
+    ! mv -fT -- "$marker_tmp" "$RECORDING_FILE"; then
+    rm -f -- "$marker_tmp"
+    return 1
+  fi
+}
+
 install_recording_escape_binding() {
   command -v hyprctl >/dev/null 2>&1 || return 0
   mkdir -p "$STATE_DIR" 2>/dev/null || return 0
@@ -1034,7 +1049,12 @@ record_geometry() {
   done
 
   if kill -0 "$pid" 2>/dev/null; then
-    printf '%s\n' "$filename" >"$RECORDING_FILE"
+    if ! publish_recording_filename "$filename"; then
+      kill -INT "$pid" 2>/dev/null || true
+      clear_recording_context
+      remove_recording_escape_binding
+      fail "could not publish the recording filename"
+    fi
     write_state "" "" "$filename"
     target_screen="$SCREEN_NAME"
     [[ -n $target_screen ]] || target_screen=$(screen_name_for_geometry "$selection")
