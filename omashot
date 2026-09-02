@@ -23,6 +23,7 @@ TIMER_SECONDS=0
 INCLUDE_CURSOR="false"
 SETTLE_SECONDS="0.15"
 SCREENSHOT_EDITOR="tensaku-edit"
+RECORDING_EDITOR="omacut"
 DESKTOP_AUDIO="false"
 MICROPHONE_AUDIO="false"
 WEBCAM="false"
@@ -80,6 +81,7 @@ load_shell_settings() {
     <<<"$PLUGIN_SETTINGS")
   INCLUDE_CURSOR=$(shell_setting_boolean includeCursor)
   SCREENSHOT_EDITOR=$(shell_setting_string editorCommand "$SCREENSHOT_EDITOR")
+  RECORDING_EDITOR=$(shell_setting_string recordingEditorCommand "$RECORDING_EDITOR")
   DESKTOP_AUDIO=$(shell_setting_boolean recordDesktopAudio)
   MICROPHONE_AUDIO=$(shell_setting_boolean recordMicrophoneAudio)
   WEBCAM=$(shell_setting_boolean recordWebcam)
@@ -998,12 +1000,31 @@ refresh_recording_indicator() {
 open_recording_in_omacut() {
   local file="$1"
   [[ -f $file && -s $file ]] || return 0
-  command -v omacut >/dev/null 2>&1 || return 0
-
-  if command -v setsid >/dev/null 2>&1 && command -v uwsm-app >/dev/null 2>&1; then
-    setsid uwsm-app -- omacut "$file" </dev/null >/dev/null 2>&1 &
-  else
-    omacut "$file" </dev/null >/dev/null 2>&1 &
+  local editor="${RECORDING_EDITOR:-omacut}"
+  # Support full command with args (e.g. "omaroll --flag")
+  if [[ "$editor" == *" "* ]]; then
+    ( bash -lc "$editor \"\$1\"" _ "$file" ) >/dev/null 2>&1 &
+    return 0
+  fi
+  if command -v "$editor" >/dev/null 2>&1; then
+    if command -v setsid >/dev/null 2>&1 && command -v uwsm-app >/dev/null 2>&1; then
+      setsid uwsm-app -- "$editor" "$file" </dev/null >/dev/null 2>&1 &
+    else
+      "$editor" "$file" </dev/null >/dev/null 2>&1 &
+    fi
+    return 0
+  fi
+  # Fallback to omacut if custom editor not found
+  if [[ "$editor" != "omacut" ]] && command -v omacut >/dev/null 2>&1; then
+    if command -v setsid >/dev/null 2>&1 && command -v uwsm-app >/dev/null 2>&1; then
+      setsid uwsm-app -- omacut "$file" </dev/null >/dev/null 2>&1 &
+    else
+      omacut "$file" </dev/null >/dev/null 2>&1 &
+    fi
+    return 0
+  fi
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$file" >/dev/null 2>&1 &
   fi
 }
 
