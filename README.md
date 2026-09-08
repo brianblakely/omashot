@@ -34,6 +34,21 @@ omarchy plugin add https://github.com/brianblakely/omashot.git
 * Press `Enter` to capture a highlighted window or a region.
 * Press `Escape` to end a screen recording. When Keystroke Display is enabled, hold `Escape` for two seconds.
 
+### Choose a Save Folder
+
+Open **Location → Custom folder…** in the toolbar, enter an absolute path (for example, `/home/alex/Captures`), and select **Save**. Omashot remembers the folder for both screenshots and screen recordings and creates it when needed. The Location menu also offers Pictures (Videos for recordings), Documents, and Downloads.
+
+You can also set `saveLocation` in the `b.omashot` plugin entry in `~/.config/omarchy/shell.json`:
+
+```json
+{
+  "id": "b.omashot",
+  "saveLocation": "/home/alex/Captures"
+}
+```
+
+Use the full path; `~` and environment variables are not expanded.
+
 ### Tweak Region Sizing and Position with the Keyboard
 
 * Use the arrow keys or `HJKL` to move the region by one pixel.

@@ -103,4 +103,15 @@ run_recording
 assert_equal "$VIDEOS_DIR" "$(<"$DESTINATION_LOG")" \
   "the retired Desktop destination did not fall back to Videos"
 
+# Keep custom paths literal, including spaces and shell metacharacters.
+custom_dir="$TEST_ROOT/Custom captures/"'$(touch injected); `literal`'
+write_settings "$custom_dir"
+run_screenshot
+[[ $(<"$SCREENSHOT_DESTINATION_LOG") == "$custom_dir"/screenshot-*.png ]] ||
+  fail "the custom screenshot folder was not used literally"
+[[ -d $custom_dir ]] || fail "the custom screenshot folder was not created"
+run_recording
+assert_equal "$custom_dir" "$(<"$DESTINATION_LOG")" \
+  "the custom recording folder was not used literally"
+
 printf 'PASS: capture destinations\n'

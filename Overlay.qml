@@ -6,6 +6,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
+import "." as Local
 
 Item {
   id: root
@@ -201,6 +202,7 @@ Item {
   function close() {
     var preserveFreeze = freezeCapturePending && freezeProc.running
     opened = false
+    saveLocationPopup.close()
     escapeDismissPending = false
     freezeOpenPending = false
     freezeCapturePending = false
@@ -1552,9 +1554,9 @@ Item {
         function selectCurrent() {
           if (currentIndex < 0 || currentIndex >= iconDropdown.options.length) return
           var next = iconDropdown.optionValue(iconDropdown.options[currentIndex])
-          iconDropdown.changed(next)
-          if (iconDropdown.value !== next) iconDropdown.value = next
           popup.close()
+          // Keep value bound to saved settings when a menu action opens a dialog.
+          iconDropdown.changed(next)
         }
 
         delegate: Rectangle {
@@ -2177,6 +2179,15 @@ Item {
       }
     }
 
+    Local.SaveLocationPopup {
+      id: saveLocationPopup
+      parent: panel.contentItem
+      currentPath: root.service ? root.service.saveLocation : ""
+      homePath: String(Quickshell.env("HOME") || "")
+      onChosen: function(path) { if (root.service) root.service.setSaveLocation(path) }
+      onClosed: if (root.opened) keyCatcher.forceActiveFocus()
+    }
+
     Item {
       id: keyCatcher
       anchors.fill: parent
@@ -2212,6 +2223,7 @@ Item {
 
     Shortcut {
       sequence: "Space"
+      enabled: !saveLocationPopup.visible
       context: Qt.WindowShortcut
       autoRepeat: false
       onActivated: root.captureWholeScreen()
@@ -2219,6 +2231,7 @@ Item {
 
     Shortcut {
       sequence: "Shift+Space"
+      enabled: !saveLocationPopup.visible
       context: Qt.WindowShortcut
       autoRepeat: false
       onActivated: root.captureWholeScreen()
@@ -2313,20 +2326,26 @@ Item {
           iconText: "󰉋"
           visible: root.fileDestinationVisible
           width: toolbar.dropdownButtonWidth
-          popupWidth: Style.space(150)
+          popupWidth: Style.space(220)
           value: service
             ? (root.recordingMode && service.saveLocation === "pictures" ? "videos" : service.saveLocation)
             : (root.recordingMode ? "videos" : "pictures")
-          options: root.recordingMode ? [
-            { value: "videos", label: "Videos" },
-            { value: "documents", label: "Documents" },
-            { value: "downloads", label: "Downloads" }
-          ] : [
-            { value: "pictures", label: "Pictures" },
-            { value: "documents", label: "Documents" },
-            { value: "downloads", label: "Downloads" }
-          ]
+          options: {
+            var entries = [
+              { value: root.recordingMode ? "videos" : "pictures", label: root.recordingMode ? "Videos" : "Pictures" },
+              { value: "documents", label: "Documents" },
+              { value: "downloads", label: "Downloads" }
+            ]
+            if (service && service.saveLocation.charAt(0) === "/")
+              entries.push({ value: service.saveLocation, label: service.saveLocation })
+            entries.push({ value: "custom", label: "Custom folder…" })
+            return entries
+          }
           onChanged: function(value) {
+            if (value === "custom") {
+              saveLocationPopup.open()
+              return
+            }
             if (service) service.setSaveLocation(root.recordingMode && value === "videos" ? "pictures" : value)
           }
         }
