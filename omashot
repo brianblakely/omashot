@@ -648,6 +648,10 @@ publish_recording_filename() {
   fi
 }
 
+# Hyprland 0.56.2 crashes even on is_enabled() for an expired keybind. Its
+# __tostring handler safely reports HL.Keybind(expired), so check that before
+# accessing retained handles in every installer and cleanup path. Keep live
+# sets reusable: removing handles can also unbind unrelated user shortcuts.
 install_recording_escape_binding() {
   command -v hyprctl >/dev/null 2>&1 || return 0
   mkdir -p "$STATE_DIR" 2>/dev/null || return 0
@@ -656,13 +660,15 @@ install_recording_escape_binding() {
   lua='
     local function disable_bindings(bindings)
       if not bindings then return end
-      for _, binding in ipairs(bindings) do binding:set_enabled(false) end
+      for _, binding in ipairs(bindings) do
+        if tostring(binding) ~= "HL.Keybind(expired)" then binding:set_enabled(false) end
+      end
     end
 
     local function bindings_are_live(bindings, expected_count)
       if not bindings or #bindings ~= expected_count then return false end
       for _, binding in ipairs(bindings) do
-        if binding:is_enabled() == nil then return false end
+        if tostring(binding) == "HL.Keybind(expired)" then return false end
       end
       return true
     end
@@ -672,7 +678,7 @@ install_recording_escape_binding() {
       omashot_recording_keybinds = nil
     end
     if omashot_recording_escape_bind then
-      omashot_recording_escape_bind:set_enabled(false)
+      disable_bindings({ omashot_recording_escape_bind })
       omashot_recording_escape_bind = nil
     end
     if omashot_recording_modifier_tracker then
@@ -720,11 +726,15 @@ install_recording_keystroke_bindings() {
   local lua
   read -r -d '' lua <<'LUA' || true
 if omashot_recording_keybinds then
-  for _, binding in ipairs(omashot_recording_keybinds) do binding:set_enabled(false) end
+  for _, binding in ipairs(omashot_recording_keybinds) do
+    if tostring(binding) ~= "HL.Keybind(expired)" then binding:set_enabled(false) end
+  end
   omashot_recording_keybinds = nil
 end
 if omashot_recording_escape_bind then
-  omashot_recording_escape_bind:set_enabled(false)
+  if tostring(omashot_recording_escape_bind) ~= "HL.Keybind(expired)" then
+    omashot_recording_escape_bind:set_enabled(false)
+  end
   omashot_recording_escape_bind = nil
 end
 if omashot_recording_modifier_tracker then
@@ -738,13 +748,15 @@ end
 
 local function disable_bindings(bindings)
   if not bindings then return end
-  for _, binding in ipairs(bindings) do binding:set_enabled(false) end
+  for _, binding in ipairs(bindings) do
+    if tostring(binding) ~= "HL.Keybind(expired)" then binding:set_enabled(false) end
+  end
 end
 
 local function bindings_are_live(bindings, expected_count)
   if not bindings or #bindings ~= expected_count then return false end
   for _, binding in ipairs(bindings) do
-    if binding:is_enabled() == nil then return false end
+    if tostring(binding) == "HL.Keybind(expired)" then return false end
   end
   return true
 end
@@ -897,12 +909,17 @@ remove_recording_escape_binding() {
     hyprctl eval '
       -- Lua handle unbinds match by key and modifier rather than by identity.
       -- Disable our retained handles so unrelated user bindings stay intact.
+      local function disable_bindings(bindings)
+        for _, binding in ipairs(bindings) do
+          if tostring(binding) ~= "HL.Keybind(expired)" then binding:set_enabled(false) end
+        end
+      end
       if omashot_recording_keybinds then
-        for _, binding in ipairs(omashot_recording_keybinds) do binding:set_enabled(false) end
+        disable_bindings(omashot_recording_keybinds)
         omashot_recording_keybinds = nil
       end
       if omashot_recording_escape_bind then
-        omashot_recording_escape_bind:set_enabled(false)
+        disable_bindings({ omashot_recording_escape_bind })
         omashot_recording_escape_bind = nil
       end
       if omashot_recording_modifier_tracker then
@@ -915,7 +932,7 @@ remove_recording_escape_binding() {
       end
       if omashot_recording_binding_sets then
         for _, bindings in pairs(omashot_recording_binding_sets) do
-          for _, binding in ipairs(bindings) do binding:set_enabled(false) end
+          disable_bindings(bindings)
         end
       end
     ' >/dev/null 2>&1 || return 0

@@ -218,8 +218,8 @@ lua "$modifier_lua_test" || fail "modifier tracking raises a Hyprland Lua runtim
 assert_contains 'omashot_recording_binding_sets = omashot_recording_binding_sets or {}' \
   "$HELPER" \
   "recording binding handles do not have a dedicated table"
-assert_contains 'for _, binding in ipairs(bindings) do binding:set_enabled(false) end' \
-  "$HELPER" "recording bindings are not disabled through their own handles"
+assert_contains 'if tostring(binding) ~= "HL.Keybind(expired)" then binding:set_enabled(false) end' \
+  "$HELPER" "recording cleanup does not skip expired handles"
 assert_absent 'binding:unbind()' "$HELPER" \
   "recording cleanup uses Hyprland's broad Lua unbind operation"
 assert_absent 'hl.unbind' "$HELPER" \
