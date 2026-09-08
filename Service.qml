@@ -27,6 +27,7 @@ Item {
   readonly property bool recordWebcam: setting("recordWebcam", false) === true
   readonly property bool recordKeystrokes: setting("recordKeystrokes", false) === true
   readonly property bool measurementModeEnabled: setting("measurementModeEnabled", false) === true
+  readonly property string recordingEditorCommand: setting("recordingEditorCommand", "omacut")
 
   property bool recording: false
   property string lastStatus: "{}"
@@ -602,6 +603,7 @@ Item {
       recordWebcam: recordWebcam,
       recordKeystrokes: recordKeystrokes,
       measurementModeEnabled: measurementModeEnabled,
+      recordingEditorCommand: recordingEditorCommand,
       recordingTargetScreenName: recordingTargetScreenName,
       recordingTargetGeometry: recordingTargetGeometry,
       helperPath: helperPath,
