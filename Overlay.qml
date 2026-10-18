@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "." as Local
 
@@ -1195,14 +1196,14 @@ Item {
 
     signal clicked()
 
-    readonly property color activeText: Color.menu.selectedText
-    readonly property color idleText: Color.menu.text
-    readonly property color ctaColor: Color.accent
+    readonly property color activeText: Commons.Color.menu.selectedText
+    readonly property color idleText: Commons.Color.menu.text
+    readonly property color ctaColor: Commons.Color.accent
     readonly property real iconExtent: Style.font.icon
     readonly property real labelAvailableWidth: Math.max(1, width - Style.spacing.xs * 2)
     readonly property color iconColor: cta ? idleText : (checked ? activeText : idleText)
-    readonly property color selectedBorder: Color.menu.selectedBorder.a > 0
-      ? Color.menu.selectedBorder
+    readonly property color selectedBorder: Commons.Color.menu.selectedBorder.a > 0
+      ? Commons.Color.menu.selectedBorder
       : Style.selectedBorderFor(idleText, activeText)
 
     width: implicitWidth
@@ -1217,7 +1218,7 @@ Item {
       : cta ? Util.alpha(ctaColor, 0.22)
       : buttonMouse.pressed ? Style.pressedFillFor(idleText, activeText)
       : buttonMouse.containsMouse ? Style.hoverFillFor(idleText, activeText)
-      : checked ? Color.menu.selectedBackground
+      : checked ? Commons.Color.menu.selectedBackground
       : Style.normalFillFor(idleText, activeText)
     border.color: cta ? Util.alpha(ctaColor, buttonMouse.containsMouse ? 1.0 : 0.78)
       : checked ? selectedBorder
@@ -1304,15 +1305,15 @@ Item {
     width: implicitWidth
     height: implicitHeight
     radius: Style.cornerRadius
-    color: Util.alpha(Color.menu.background, 0.94)
-    border.color: Util.alpha(Color.accent, 0.82)
+    color: Util.alpha(Commons.Color.menu.background, 0.94)
+    border.color: Util.alpha(Commons.Color.accent, 0.82)
     border.width: Math.max(1, Style.normalBorderWidth)
 
     Text {
       id: badgeText
       anchors.centerIn: parent
       text: measurementBadge.labelText
-      color: Color.menu.text
+      color: Commons.Color.menu.text
       font.family: Style.font.menuFamily
       font.pixelSize: Style.font.bodySmall
       font.weight: Font.DemiBold
@@ -1334,9 +1335,9 @@ Item {
       id: marginValueText
       anchors.centerIn: parent
       text: marginValueLabel.labelText
-      color: Color.menu.text
+      color: Commons.Color.menu.text
       style: Text.Outline
-      styleColor: Color.menu.background
+      styleColor: Commons.Color.menu.background
       font.family: Style.font.menuFamily
       font.pixelSize: Style.font.bodySmall
       font.weight: Font.DemiBold
@@ -1362,7 +1363,7 @@ Item {
       y: marginLine.vertical ? 0 : (marginLine.height - height) / 2
       width: marginLine.vertical ? marginLine.stroke : marginLine.span
       height: marginLine.vertical ? marginLine.span : marginLine.stroke
-      color: Color.accent
+      color: Commons.Color.accent
     }
 
     Rectangle {
@@ -1372,7 +1373,7 @@ Item {
       y: marginLine.vertical ? -marginLine.stroke / 2 : 0
       width: marginLine.vertical ? marginLine.capLength : marginLine.stroke
       height: marginLine.vertical ? marginLine.stroke : marginLine.capLength
-      color: Color.accent
+      color: Commons.Color.accent
     }
 
     Rectangle {
@@ -1382,7 +1383,7 @@ Item {
       y: marginLine.vertical ? marginLine.span - marginLine.stroke / 2 : 0
       width: marginLine.vertical ? marginLine.capLength : marginLine.stroke
       height: marginLine.vertical ? marginLine.stroke : marginLine.capLength
-      color: Color.accent
+      color: Commons.Color.accent
     }
   }
 
@@ -1417,12 +1418,12 @@ Item {
     implicitWidth: dropdownRow.implicitWidth + Style.spacing.controlPaddingX
     implicitHeight: Style.spacing.controlHeight
     radius: Style.cornerRadius
-    color: dropdownMouse.pressed ? Style.pressedFillFor(Color.menu.text, Color.menu.selectedText)
-      : dropdownMouse.containsMouse || popup.opened ? Style.hoverFillFor(Color.menu.text, Color.menu.selectedText)
-      : Style.normalFillFor(Color.menu.text, Color.menu.selectedText)
+    color: dropdownMouse.pressed ? Style.pressedFillFor(Commons.Color.menu.text, Commons.Color.menu.selectedText)
+      : dropdownMouse.containsMouse || popup.opened ? Style.hoverFillFor(Commons.Color.menu.text, Commons.Color.menu.selectedText)
+      : Style.normalFillFor(Commons.Color.menu.text, Commons.Color.menu.selectedText)
     border.color: dropdownMouse.containsMouse || popup.opened
-      ? Style.hoverBorderFor(Color.menu.text, Color.menu.selectedText)
-      : Style.normalBorderFor(Color.menu.text, Color.menu.selectedText)
+      ? Style.hoverBorderFor(Commons.Color.menu.text, Commons.Color.menu.selectedText)
+      : Style.normalBorderFor(Commons.Color.menu.text, Commons.Color.menu.selectedText)
     border.width: dropdownMouse.containsMouse || popup.opened ? Style.hoverBorderWidth : Style.normalBorderWidth
 
     Behavior on color { ColorAnimation { duration: 100 } }
@@ -1457,7 +1458,7 @@ Item {
 
       Text {
         text: iconDropdown.iconText
-        color: Color.menu.text
+        color: Commons.Color.menu.text
         font.family: Style.font.menuFamily
         font.pixelSize: Style.font.icon
         anchors.verticalCenter: parent.verticalCenter
@@ -1465,7 +1466,7 @@ Item {
 
       Text {
         text: "󰅀"
-        color: Qt.darker(Color.menu.text, 1.25)
+        color: Qt.darker(Commons.Color.menu.text, 1.25)
         font.family: Style.font.menuFamily
         font.pixelSize: Style.font.caption
         anchors.verticalCenter: parent.verticalCenter
@@ -1504,8 +1505,8 @@ Item {
 
       onAboutToShow: iconDropdown.positionPopup()
       background: Rectangle {
-        color: Color.menu.background
-        border.color: Color.menu.border
+        color: Commons.Color.menu.background
+        border.color: Commons.Color.menu.border
         border.width: Style.normalBorderWidth
         radius: Style.cornerRadius
       }
@@ -1566,7 +1567,7 @@ Item {
           width: optionList.width
           height: Style.spacing.popupRowHeight
           color: index === optionList.currentIndex
-            ? Style.hoverFillFor(Color.menu.text, Color.menu.selectedText)
+            ? Style.hoverFillFor(Commons.Color.menu.text, Commons.Color.menu.selectedText)
             : "transparent"
 
           Text {
@@ -1576,7 +1577,7 @@ Item {
             anchors.leftMargin: Style.spacing.controlPaddingX
             anchors.rightMargin: Style.spacing.controlPaddingX
             text: iconDropdown.optionLabel(modelData)
-            color: index === optionList.currentIndex ? Style.hoverStateColor(Color.menu.text, Color.menu.selectedText) : Color.menu.text
+            color: index === optionList.currentIndex ? Style.hoverStateColor(Commons.Color.menu.text, Commons.Color.menu.selectedText) : Commons.Color.menu.text
             font.family: Style.font.menuFamily
             font.pixelSize: Style.font.body
             elide: Text.ElideRight
@@ -1776,8 +1777,8 @@ Item {
         : onBottom ? parent.height - root.regionBorderWidth
         : parent.height / 2 - height / 2
       radius: 0
-      color: Color.menu.background
-      border.color: Color.accent
+      color: Commons.Color.menu.background
+      border.color: Commons.Color.accent
       border.width: root.regionBorderWidth
       z: 2
 
@@ -1834,7 +1835,7 @@ Item {
 
       Rectangle {
         anchors.fill: parent
-        color: Color.menu.scrim
+        color: Commons.Color.menu.scrim
         visible: !root.hasSelection
       }
 
@@ -1843,7 +1844,7 @@ Item {
         y: 0
         width: parent.width
         height: root.hasSelection ? root.selectionY : parent.height
-        color: Color.menu.scrim
+        color: Commons.Color.menu.scrim
         visible: root.hasSelection
       }
 
@@ -1852,7 +1853,7 @@ Item {
         y: root.selectionY
         width: root.selectionX
         height: root.selectionH
-        color: Color.menu.scrim
+        color: Commons.Color.menu.scrim
         visible: root.hasSelection
       }
 
@@ -1861,7 +1862,7 @@ Item {
         y: root.selectionY
         width: Math.max(0, parent.width - x)
         height: root.selectionH
-        color: Color.menu.scrim
+        color: Commons.Color.menu.scrim
         visible: root.hasSelection
       }
 
@@ -1870,7 +1871,7 @@ Item {
         y: root.selectionY + root.selectionH
         width: parent.width
         height: Math.max(0, parent.height - y)
-        color: Color.menu.scrim
+        color: Commons.Color.menu.scrim
         visible: root.hasSelection
       }
 
@@ -1882,7 +1883,7 @@ Item {
         height: Math.max(1, root.regionBorderWidth)
         visible: root.measurementMode && root.measurementPointerActive
           && !root.recordingPresentation
-        color: Color.accent
+        color: Commons.Color.accent
         opacity: 0.52
         z: 3
       }
@@ -1894,7 +1895,7 @@ Item {
         width: Math.max(1, root.regionBorderWidth)
         height: parent.height
         visible: horizontalMeasurementGuide.visible
-        color: Color.accent
+        color: Commons.Color.accent
         opacity: 0.52
         z: 3
       }
@@ -1933,7 +1934,7 @@ Item {
         height: root.selectionH + root.regionBorderWidth * 2
         visible: root.showSelectionFrame && !root.recordingPresentation
         color: "transparent"
-        border.color: Color.accent
+        border.color: Commons.Color.accent
         border.width: root.regionBorderWidth
         z: 4
 
@@ -2132,8 +2133,8 @@ Item {
           : Math.max(0, selectionDimensions.y - height - gap)
         visible: selectionDimensions.visible && root.pointerAction === ""
         radius: Style.cornerRadius
-        color: Util.alpha(Color.menu.background, 0.96)
-        border.color: Color.menu.border
+        color: Util.alpha(Commons.Color.menu.background, 0.96)
+        border.color: Commons.Color.menu.border
         border.width: Math.max(1, Style.normalBorderWidth)
         z: 8
 
@@ -2267,8 +2268,8 @@ Item {
       anchors.horizontalCenter: parent.horizontalCenter
       y: toolbar.moveToTop ? toolbar.edgeMargin : toolbar.normalBottomY
       radius: Style.cornerRadius
-      color: Color.menu.background
-      borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.normalBorderWidth))
+      color: Commons.Color.menu.background
+      borderSpec: Border.surfaceSpec("menu", "border", Commons.Color.menu.border, Math.max(1, Style.normalBorderWidth))
       padding: Style.spacing.xxl
       clip: true
 

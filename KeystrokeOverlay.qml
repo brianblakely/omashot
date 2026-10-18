@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import qs.Commons
+import qs.Commons as Commons
 
 Item {
   id: root
@@ -86,7 +87,7 @@ Item {
         height: Math.min(panel.targetRect.height,
           keyRow.implicitHeight + verticalPadding * 2)
         radius: Style.cornerRadius
-        color: Color.foreground
+        color: Commons.Color.foreground
         clip: true
 
         onAvailableWidthChanged: Qt.callLater(function() { keystrokeCard.trimToAvailableWidth() })
@@ -131,7 +132,7 @@ Item {
 
                   Layout.alignment: Qt.AlignVCenter
                   text: String(modelData.text || "")
-                  color: Color.background
+                  color: Commons.Color.background
                   font.family: requestedFontFamily !== ""
                     ? requestedFontFamily : Style.font.menuFamily
                   font.pixelSize: Style.font.body * 3
@@ -144,7 +145,7 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 visible: Number(keystrokeEntry.modelData.count) > 1
                 text: " ×" + Number(keystrokeEntry.modelData.count)
-                color: Color.background
+                color: Commons.Color.background
                 font.family: Style.font.menuFamily
                 font.pixelSize: Style.font.body * 3
                 font.weight: Font.DemiBold

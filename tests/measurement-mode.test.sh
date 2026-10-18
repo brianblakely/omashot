@@ -178,7 +178,7 @@ assert_contains 'component MarginValueLabel: Item' \
   "margin values are still rendered inside a box"
 assert_contains 'style: Text.Outline' \
   "margin values do not have a text outline"
-assert_contains 'styleColor: Color.menu.background' \
+assert_contains 'styleColor: Commons.Color.menu.background' \
   "margin value outlines do not use the background color"
 assert_contains 'readonly property real marginLabelClearance: resizeHandleSize + Style.spacing.xs' \
   "margin values do not clear the resize handles"

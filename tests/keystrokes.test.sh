@@ -359,9 +359,9 @@ assert_contains 'width: Math.min(availableWidth' "$KEYSTROKE_OVERLAY" \
   "the key row is not constrained to the recorded target width"
 assert_contains 'height: Math.min(panel.targetRect.height' "$KEYSTROKE_OVERLAY" \
   "the key row is not constrained to the recorded target height"
-assert_contains 'color: Color.foreground' "$KEYSTROKE_OVERLAY" \
+assert_contains 'color: Commons.Color.foreground' "$KEYSTROKE_OVERLAY" \
   "the key row does not use the inverse theme background"
-assert_contains 'color: Color.background' "$KEYSTROKE_OVERLAY" \
+assert_contains 'color: Commons.Color.background' "$KEYSTROKE_OVERLAY" \
   "the key row does not use the inverse theme text color"
 assert_contains 'font.pixelSize: Style.font.body * 3' "$KEYSTROKE_OVERLAY" \
   "the key row font is not three times the standard body size"

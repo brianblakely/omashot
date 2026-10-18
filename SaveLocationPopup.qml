@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls as Controls
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 Controls.Popup {
@@ -32,8 +33,8 @@ Controls.Popup {
   }
 
   background: Rectangle {
-    color: Color.menu.background
-    border.color: Color.menu.border
+    color: Commons.Color.menu.background
+    border.color: Commons.Color.menu.border
     border.width: Style.normalBorderWidth
     radius: Style.cornerRadius
   }
@@ -44,7 +45,7 @@ Controls.Popup {
     Text {
       width: parent.width
       text: "Custom save folder"
-      color: Color.menu.text
+      color: Commons.Color.menu.text
       font.family: Style.font.menuFamily
       font.pixelSize: Style.font.body
       wrapMode: Text.Wrap
@@ -54,15 +55,15 @@ Controls.Popup {
       id: pathInput
       width: parent.width
       placeholderText: "Absolute folder path"
-      foreground: Color.menu.text
-      accent: Color.menu.selectedText
+      foreground: Commons.Color.menu.text
+      accent: Commons.Color.menu.selectedText
       onAccepted: root.submit()
     }
 
     Text {
       width: parent.width
       text: "Enter a full path starting with /. Screenshots and recordings will be saved here."
-      color: Color.menu.text
+      color: Commons.Color.menu.text
       font.family: Style.font.menuFamily
       font.pixelSize: Style.font.caption
       wrapMode: Text.Wrap
@@ -74,16 +75,16 @@ Controls.Popup {
 
       Button {
         text: "Cancel"
-        foreground: Color.menu.text
-        accent: Color.menu.selectedText
+        foreground: Commons.Color.menu.text
+        accent: Commons.Color.menu.selectedText
         focusable: true
         onClicked: root.close()
       }
 
       Button {
         text: "Save"
-        foreground: Color.menu.text
-        accent: Color.menu.selectedText
+        foreground: Commons.Color.menu.text
+        accent: Commons.Color.menu.selectedText
         focusable: true
         bordered: true
         enabled: pathInput.text.charAt(0) === "/"
