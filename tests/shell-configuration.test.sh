@@ -54,6 +54,23 @@ assert_source_absent 'XDG_DESKTOP_DIR' "$HELPER" \
 rg --fixed-strings --quiet -- 'var next = normalizeSaveLocation(value)' "$SERVICE" ||
   fail "the service accepts unrecognized symbolic save locations"
 
+# The scoped plugin API exposes no shellConfig, so the service must read its own
+# entry from shell.json instead of trusting a property that is never set.
+rg --fixed-strings --quiet -- 'id: configFile' "$SERVICE" ||
+  fail "the service does not watch shell.json for its settings"
+rg --fixed-strings --quiet -- 'path: root.userConfigPath' "$SERVICE" ||
+  fail "the settings watcher does not point at the user shell config"
+rg --fixed-strings --quiet -- 'onLoaded: root.fileSettings = root.settingsFromConfig(text())' "$SERVICE" ||
+  fail "the settings watcher does not parse the plugin entry"
+rg --fixed-strings --quiet -- 'onFileChanged: reload()' "$SERVICE" ||
+  fail "the settings watcher does not reload on host writes"
+# updateEntryInline replaces the whole entry, so saving one preference must not
+# drop the others.
+rg --fixed-strings --quiet -- 'var current = pluginSettings || ({})' "$SERVICE" ||
+  fail "the service does not merge new settings over the current entry"
+rg --fixed-strings --quiet -- 'if (saved) fileSettings = next' "$SERVICE" ||
+  fail "the service does not reflect a saved setting immediately"
+
 mkdir -p "$TEST_HOME/.config/omarchy" "$STUB_BIN" "$OUTPUT_DIR" "$TMP_DIR"
 
 jq -n --arg output "$OUTPUT_DIR" '{

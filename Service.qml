@@ -16,6 +16,13 @@ Item {
   readonly property string sourceDir: manifest && manifest.__sourceDir ? String(manifest.__sourceDir) : ""
   readonly property string helperPath: sourceDir ? sourceDir + "/omashot" : Qt.resolvedUrl("omashot").toString().replace(/^file:\/\//, "")
 
+  // shell.json is the configuration source. The scoped plugin API handed to a
+  // third-party service exposes no shellConfig, so read our own entry from the
+  // file and watch it for host-side writes (omarchy plugin commands, hand
+  // edits) instead of relying on a property that is never set.
+  readonly property string userConfigPath: String(Quickshell.env("HOME") || "") + "/.config/omarchy/shell.json"
+  property var fileSettings: ({})
+
   readonly property var pluginSettings: currentSettings()
   readonly property string captureMode: setting("captureMode", "selection")
   readonly property string outputMode: setting("outputMode", "file-and-clipboard")
@@ -172,14 +179,29 @@ Item {
     return "pictures"
   }
 
-  function currentSettings() {
-    var config = shell && shell.shellConfig ? shell.shellConfig : null
+  function settingsFromConfig(raw) {
+    var config = null
+    try { config = JSON.parse(String(raw || "")) } catch (e) { config = null }
     var plugins = config && Array.isArray(config.plugins) ? config.plugins : []
     for (var i = 0; i < plugins.length; i++) {
       var entry = plugins[i]
       if (entry && String(entry.id || "") === pluginId) return entry
     }
     return {}
+  }
+
+  function currentSettings() {
+    // Prefer the host's live config when it carries our entry; fall back to the
+    // file, which is the only source the scoped plugin API leaves us.
+    var config = shell && shell.shellConfig ? shell.shellConfig : null
+    if (config) {
+      var plugins = Array.isArray(config.plugins) ? config.plugins : []
+      for (var i = 0; i < plugins.length; i++) {
+        var entry = plugins[i]
+        if (entry && String(entry.id || "") === pluginId) return entry
+      }
+    }
+    return fileSettings || ({})
   }
 
   function setting(name, fallback) {
@@ -190,8 +212,12 @@ Item {
   function saveSettings(nextValues) {
     if (!shell || typeof shell.updateEntryInline !== "function") return false
 
+    // Merge over the current entry. updateEntryInline replaces the whole entry,
+    // so a stale or empty read here silently drops the other recording
+    // preferences — which is how toggling audio used to erase them.
+    var current = pluginSettings || ({})
+
     var next = {}
-    var current = pluginSettings || {}
     for (var key in current) {
       if (key !== "id") next[key] = current[key]
     }
@@ -199,7 +225,13 @@ Item {
       if (nkey !== "id") next[nkey] = nextValues[nkey]
     }
 
-    return shell.updateEntryInline(pluginId, next)
+    var saved = shell.updateEntryInline(pluginId, next)
+    // Reflect the new state immediately on success. On failure re-read the
+    // file, so the UI shows what is actually persisted instead of a state the
+    // host rejected.
+    if (saved) fileSettings = next
+    else configFile.reload()
+    return saved
   }
 
   function captureContext(geometry, screenName, outputOverride, freezePid, targetGeometry, modifiers) {
@@ -725,6 +757,21 @@ Item {
   }
 
   Component.onDestruction: root.runDetached(["cleanup-recording-input"])
+
+  FileView {
+    id: configFile
+
+    path: root.userConfigPath
+    watchChanges: true
+    // Read synchronously at startup so the first save cannot run against an
+    // empty entry and replace the user's other preferences.
+    blockLoading: true
+    printErrors: false
+    // text() is stale inside the change signal, so re-read through reload().
+    onLoaded: root.fileSettings = root.settingsFromConfig(text())
+    onFileChanged: reload()
+    onLoadFailed: root.fileSettings = ({})
+  }
 
   Timer {
     interval: 1500
