@@ -96,6 +96,11 @@ cat >"$STUB_BIN/notify-send" <<'STUB'
 exit 0
 STUB
 
+cat >"$STUB_BIN/omarchy-notification-send" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+
 chmod +x "$STUB_BIN"/*
 
 run_screenshot() {

@@ -95,6 +95,11 @@ cat >"$STUB_BIN/notify-send" <<'STUB'
 printf '%s\n' "$*" >"$TEST_NOTIFY_LOG"
 STUB
 
+cat >"$STUB_BIN/omarchy-notification-send" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >"$TEST_NOTIFY_LOG"
+STUB
+
 chmod +x "$STUB_BIN"/*
 
 demo_path=$(env \

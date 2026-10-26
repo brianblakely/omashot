@@ -8,7 +8,13 @@ SHELL_CONFIG_FILE="$HOME/.config/omarchy/shell.json"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omashot"
 STATE_FILE="$STATE_DIR/state.json"
 TMP_DIR="${TMPDIR:-/tmp}"
-RECORDING_FILE="/tmp/omarchy-screenrecord-filename"
+# Omarchy's recorder keeps its marker and pid files in the per-user runtime
+# directory (0700). Reading and writing them anywhere else means a region
+# recording is started but can never be found again: --stop-recording reads the
+# pid file to signal, and reads this marker to report the saved filename.
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/omarchy}"
+RECORDING_FILE="$RUNTIME_DIR/omarchy-screenrecord-filename"
+RECORDING_PID_FILE="$RUNTIME_DIR/omarchy-screenrecord-pid"
 RECORDING_ESCAPE_MARKER="$STATE_DIR/recording-escape-bound"
 RECORDING_CONTEXT_FILE="$STATE_DIR/recording-context.json"
 
@@ -80,8 +86,17 @@ load_shell_settings() {
   TIMER_SECONDS=$(jq -r 'if (.timerSeconds | type) == "number" then .timerSeconds else 0 end' \
     <<<"$PLUGIN_SETTINGS")
   INCLUDE_CURSOR=$(shell_setting_boolean includeCursor)
-  SCREENSHOT_EDITOR=$(shell_setting_string editorCommand "$SCREENSHOT_EDITOR")
-  RECORDING_EDITOR=$(shell_setting_string recordingEditorCommand "$RECORDING_EDITOR")
+  # The per-kind keys win; viewerCommand names one app for both kinds.
+  local screenshot_editor recording_editor viewer_editor
+  screenshot_editor=$(shell_setting_string editorCommand "")
+  recording_editor=$(shell_setting_string recordingEditorCommand "")
+  viewer_editor=$(shell_setting_string viewerCommand "")
+  [[ -n $screenshot_editor ]] && SCREENSHOT_EDITOR="$screenshot_editor"
+  [[ -n $recording_editor ]] && RECORDING_EDITOR="$recording_editor"
+  if [[ -n $viewer_editor ]]; then
+    [[ -n $screenshot_editor ]] || SCREENSHOT_EDITOR="$viewer_editor"
+    [[ -n $recording_editor ]] || RECORDING_EDITOR="$viewer_editor"
+  fi
   DESKTOP_AUDIO=$(shell_setting_boolean recordDesktopAudio)
   MICROPHONE_AUDIO=$(shell_setting_boolean recordMicrophoneAudio)
   WEBCAM=$(shell_setting_boolean recordWebcam)
@@ -523,11 +538,47 @@ open_editor() {
 }
 
 notify_capture() {
-  local title="$1" body="$2"
+  local title="$1" body="$2" file="${3:-}" editor="${4:-}"
+
+  # A file to open makes the card actionable: its button, and the shell's
+  # "invoke last notification", open that file in the configured editor.
+  if [[ -n $file && -n $editor && -f $file ]] &&
+    command -v omarchy-notification-send >/dev/null 2>&1; then
+    local -a exec_args=()
+    read -r -a exec_args <<<"$editor"
+    # A configured app that is not installed would otherwise leave the card
+    # with no action at all, so Super + Alt + , would do nothing. Fall back to
+    # the desktop handler, which is what a plain double-click would use.
+    if ((${#exec_args[@]} > 0)) && ! command -v "${exec_args[0]}" >/dev/null 2>&1 &&
+      command -v xdg-open >/dev/null 2>&1; then
+      exec_args=(xdg-open)
+    fi
+    if ((${#exec_args[@]} > 0)) && command -v "${exec_args[0]}" >/dev/null 2>&1; then
+      local -a send_args=("$title" "$body" -t 10000)
+      case "${file,,}" in
+      *.png | *.jpg | *.jpeg | *.webp | *.bmp | *.gif) send_args+=(--image "$file") ;;
+      esac
+      if omarchy-notification-send "${send_args[@]}" --exec "${exec_args[@]}" "$file" >/dev/null 2>&1; then
+        return 0
+      fi
+    fi
+  fi
 
   if command -v notify-send >/dev/null 2>&1; then
     notify-send "$title" "$body" -t 3000 >/dev/null 2>&1 || true
   fi
+}
+
+# Omarchy's own recorder posts a "Recording saved" card whose action opens the
+# file in mpv. Drop it so the card that replaces it is the only one, and the
+# one whose action opens the recording in the configured editor.
+dismiss_recording_notification() {
+  local summary
+  command -v omarchy-i18n >/dev/null 2>&1 || return 0
+  command -v omarchy-shell >/dev/null 2>&1 || return 0
+  summary=$(omarchy-i18n capture.recordingSaved 2>/dev/null) || return 0
+  [[ -n $summary ]] || return 0
+  omarchy-shell -q notifications dismiss "$summary" >/dev/null 2>&1 || true
 }
 
 demo_screenshot() {
@@ -550,7 +601,7 @@ demo_screenshot() {
   restore_cursor_mode
 
   printf '%s\n' "$filepath"
-  notify_capture "Omashot demo screenshot saved" "$filepath"
+  notify_capture "Omashot demo screenshot saved" "$filepath" "$filepath" "$SCREENSHOT_EDITOR"
 }
 
 screenshot() {
@@ -609,7 +660,7 @@ screenshot() {
   file)
     printf '%s\n' "$filepath"
     write_state "" "$filepath" ""
-    notify_capture "Screenshot saved" "$filepath"
+    notify_capture "Screenshot saved" "$filepath" "$filepath" "$SCREENSHOT_EDITOR"
     ;;
   editor)
     if ! open_editor "$filepath"; then
@@ -624,7 +675,7 @@ screenshot() {
     wl-copy --type image/png <"$filepath"
     printf '%s\n' "$filepath"
     write_state "" "$filepath" ""
-    notify_capture "Screenshot saved to file and clipboard" "$filepath"
+    notify_capture "Screenshot saved to file and clipboard" "$filepath" "$filepath" "$SCREENSHOT_EDITOR"
     ;;
   esac
 }
@@ -644,6 +695,21 @@ publish_recording_filename() {
   if ! printf '%s\n' "$filename" >"$marker_tmp" ||
     ! mv -fT -- "$marker_tmp" "$RECORDING_FILE"; then
     rm -f -- "$marker_tmp"
+    return 1
+  fi
+}
+
+publish_recording_pid() {
+  local pid="$1" pid_tmp
+
+  # Same atomic, symlink-safe write as the filename marker: Omarchy's stop path
+  # reads this to signal the recorder, so it must be a private regular file.
+  [[ $pid =~ ^[1-9][0-9]*$ ]] || return 1
+  mkdir -p "$RUNTIME_DIR" 2>/dev/null || return 1
+  pid_tmp=$(mktemp -- "${RECORDING_PID_FILE}.XXXXXX") || return 1
+  if ! printf '%s\n' "$pid" >"$pid_tmp" ||
+    ! mv -fT -- "$pid_tmp" "$RECORDING_PID_FILE"; then
+    rm -f -- "$pid_tmp"
     return 1
   fi
 }
@@ -1014,10 +1080,10 @@ refresh_recording_indicator() {
   fi
 }
 
-open_recording_in_omacut() {
-  local file="$1"
+open_in_editor() {
+  local file="$1" editor="${2:-}"
   [[ -f $file && -s $file ]] || return 0
-  local editor="${RECORDING_EDITOR:-omacut}"
+  [[ -n $editor ]] || editor="omacut"
   # Support full command with args (e.g. "omaroll --flag")
   if [[ "$editor" == *" "* ]]; then
     ( bash -lc "$editor \"\$1\"" _ "$file" ) >/dev/null 2>&1 &
@@ -1043,6 +1109,10 @@ open_recording_in_omacut() {
   if command -v xdg-open >/dev/null 2>&1; then
     xdg-open "$file" >/dev/null 2>&1 &
   fi
+}
+
+open_recording_in_omacut() {
+  open_in_editor "$1" "$RECORDING_EDITOR"
 }
 
 record_geometry() {
@@ -1092,6 +1162,15 @@ record_geometry() {
       clear_recording_context
       remove_recording_escape_binding
       fail "could not publish the recording filename"
+    fi
+    # Omarchy's --stop-recording finds the recorder through this pid file and
+    # signals it there. Without it a region recording runs until it is killed
+    # by hand, and no card is posted and no editor opens.
+    if ! publish_recording_pid "$pid"; then
+      kill -INT "$pid" 2>/dev/null || true
+      clear_recording_context
+      remove_recording_escape_binding
+      fail "could not publish the recording pid"
     fi
     write_state "" "" "$filename"
     target_screen="$SCREEN_NAME"
@@ -1172,7 +1251,12 @@ stop_recording() {
     [[ -n $filename && -f $filename && -s $filename ]] &&
     grep -Fqx -- "$filename" "$STOP_OUTPUT_FILE"; then
     write_state "" "" "$filename"
-    open_recording_in_omacut "$filename"
+    # Omarchy's recorder already posted a card for this recording, with mpv as
+    # its action. Replace it with one that opens the recording in the editor
+    # the user configured. The card is the only way in: opening the editor here
+    # would take the screen away from whatever the recording was of.
+    dismiss_recording_notification
+    notify_capture "Recording saved" "$filename" "$filename" "$RECORDING_EDITOR"
   fi
 
   rm -f -- "$STOP_OUTPUT_FILE"
@@ -1235,16 +1319,33 @@ status_json() {
 }
 
 open_last() {
-  local file
-  file=$(last_state_value lastScreenshot)
-  [[ -f $file ]] || file=$(last_state_value lastRecording)
-  [[ -f $file ]] || exit 1
+  local screenshot recording file editor
+  screenshot=$(last_state_value lastScreenshot)
+  recording=$(last_state_value lastRecording)
 
-  if command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$file" >/dev/null 2>&1 &
+  # Whichever of the two was written most recently is the one to open, in the
+  # editor configured for that kind of capture.
+  file=""
+  editor=""
+  if [[ -f $screenshot && -f $recording ]]; then
+    if [[ $screenshot -nt $recording ]]; then
+      file="$screenshot"
+      editor="$SCREENSHOT_EDITOR"
+    else
+      file="$recording"
+      editor="$RECORDING_EDITOR"
+    fi
+  elif [[ -f $screenshot ]]; then
+    file="$screenshot"
+    editor="$SCREENSHOT_EDITOR"
+  elif [[ -f $recording ]]; then
+    file="$recording"
+    editor="$RECORDING_EDITOR"
   else
-    printf '%s\n' "$file"
+    exit 1
   fi
+
+  open_in_editor "$file" "$editor"
 }
 
 case "${COMMAND,,}" in

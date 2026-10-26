@@ -49,6 +49,32 @@ You can also set `saveLocation` in the `b.omashot` plugin entry in `~/.config/om
 
 Use the full path; `~` and environment variables are not expanded.
 
+### Open Captures in Another App
+
+Omashot opens a capture in the app you configure for it: `editorCommand` for
+screenshots and `recordingEditorCommand` for screen recordings. Both are set
+in the `b.omashot` plugin entry in `~/.config/omarchy/shell.json`:
+
+```json
+{
+  "id": "b.omashot",
+  "editorCommand": "omaroll",
+  "recordingEditorCommand": "omaroll"
+}
+```
+
+With an editor set, Omashot:
+
+* opens the capture in that app when a screen recording finishes,
+* gives the capture notification an action, so clicking the card opens the
+  file in that app, and the shell's "invoke last notification" acts on it, and
+* opens the most recent capture (screenshot or recording) with
+  `omashot open-last`, in the editor configured for that kind of capture.
+
+Omarchy's own recorder still posts its own "Recording saved" card, whose
+action opens the recording in mpv. Drop that card so the one Omashot posts
+replaces it, and the recording opens in the configured editor instead.
+
 ### Tweak Region Sizing and Position with the Keyboard
 
 * Use the arrow keys or `HJKL` to move the region by one pixel.

@@ -10,8 +10,6 @@ RECORDING_MARKER="$TEST_ROOT/recording-marker"
 OMACUT_LOG="$TEST_ROOT/omacut-args"
 STOP_STDOUT="$TEST_ROOT/stop-stdout"
 INJECTION_SENTINEL="$TEST_ROOT/command-injection-ran"
-STOP_COMPLETE="$TEST_ROOT/stop-complete"
-ORDERING_ERROR="$TEST_ROOT/opened-before-finalization"
 TEST_HOME="$TEST_ROOT/home"
 
 cleanup() {
@@ -31,18 +29,6 @@ assert_equal() {
     fail "$message (expected '$expected', got '$actual')"
 }
 
-wait_for_file() {
-  local file="$1"
-  local attempt
-
-  for ((attempt = 0; attempt < 40; attempt++)); do
-    [[ -f $file ]] && return 0
-    sleep 0.05
-  done
-
-  fail "timed out waiting for $file"
-}
-
 run_omashot() {
   (
     cd "$TEST_ROOT"
@@ -52,8 +38,6 @@ run_omashot() {
       XDG_STATE_HOME="$STATE_ROOT" \
       TEST_RECORDING_MARKER="$RECORDING_MARKER" \
       TEST_OMACUT_LOG="$OMACUT_LOG" \
-      TEST_STOP_COMPLETE="$STOP_COMPLETE" \
-      TEST_ORDERING_ERROR="$ORDERING_ERROR" \
       TEST_FINALIZE_FILE="${TEST_FINALIZE_FILE:-}" \
       TEST_STOP_OUTPUT="${TEST_STOP_OUTPUT:-}" \
       TEST_STOP_STATUS="${TEST_STOP_STATUS:-0}" \
@@ -70,7 +54,6 @@ cat >"$STUB_BIN/omarchy-capture-screenrecording" <<'STUB'
 #!/usr/bin/env bash
 if [[ -n ${TEST_FINALIZE_FILE:-} ]]; then
   printf 'video data\n' >"$TEST_FINALIZE_FILE"
-  printf 'complete\n' >"$TEST_STOP_COMPLETE"
 fi
 if [[ ${1:-} == --stop-recording && -n ${TEST_STOP_OUTPUT:-} ]]; then
   printf '%s\n' "$TEST_STOP_OUTPUT"
@@ -81,7 +64,9 @@ STUB
 
 cat >"$STUB_BIN/cat" <<'STUB'
 #!/usr/bin/env bash
-if [[ $# == 1 && $1 == /tmp/omarchy-screenrecord-filename ]]; then
+# The marker lives in the per-user runtime dir; match it by basename so the
+# test does not have to know which runtime directory the helper picked.
+if [[ $# == 1 && ${1##*/} == omarchy-screenrecord-filename ]]; then
   exec /usr/bin/cat "$TEST_RECORDING_MARKER"
 fi
 exec /usr/bin/cat "$@"
@@ -100,16 +85,9 @@ STUB
 
 cat >"$STUB_BIN/omacut" <<'STUB'
 #!/usr/bin/env bash
-if [[ ! -f $TEST_STOP_COMPLETE ]]; then
-  printf 'opened too early\n' >"$TEST_ORDERING_ERROR"
-  exit 1
-fi
-tmp_log="${TEST_OMACUT_LOG}.tmp.$$"
-{
-  printf '%s\0' "$#"
-  printf '%s\0' "$@"
-} >"$tmp_log"
-mv "$tmp_log" "$TEST_OMACUT_LOG"
+# Records any launch. Nothing should reach this during a stop: the card the
+# stop posts is the only way into the recording.
+printf '%s\0' "$#" "$@" >"$TEST_OMACUT_LOG"
 STUB
 
 chmod +x "$STUB_BIN"/*
@@ -122,19 +100,16 @@ TEST_FINALIZE_FILE="$recording" TEST_STOP_OUTPUT="$recording" \
 
 assert_equal "$recording" "$(sed -n '1p' "$STOP_STDOUT")" \
   "stop output was not forwarded"
-wait_for_file "$OMACUT_LOG"
 
-[[ ! -e $ORDERING_ERROR ]] || fail "Omacut opened before recording finalization"
-mapfile -d '' -t omacut_args <"$OMACUT_LOG"
-assert_equal "1" "${omacut_args[0]:-}" "Omacut did not receive exactly one argument"
-assert_equal "$recording" "${omacut_args[1]:-}" "Omacut received the wrong recording path"
+# The recording must not open by itself: the card it posts is the way in, so a
+# finished recording leaves the screen as it was.
+[[ ! -e $OMACUT_LOG ]] || fail "the recording opened itself instead of waiting for the card"
 [[ ! -e $INJECTION_SENTINEL ]] || fail "recording path was evaluated as shell code"
 assert_equal "$recording" \
   "$(jq -r '.lastRecording' "$STATE_ROOT/omashot/state.json")" \
   "completed recording was not saved in Omashot state"
 
 rm -f "$OMACUT_LOG"
-rm -f "$STOP_COMPLETE"
 printf '%s\n' "$recording" >"$RECORDING_MARKER"
 if TEST_FINALIZE_FILE="$recording" TEST_STOP_OUTPUT="$recording" \
   TEST_STOP_STATUS=7 run_omashot >/dev/null; then

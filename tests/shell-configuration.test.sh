@@ -104,6 +104,11 @@ cat >"$STUB_BIN/notify-send" <<'STUB'
 exit 0
 STUB
 
+cat >"$STUB_BIN/omarchy-notification-send" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+
 cat >"$STUB_BIN/omarchy-capture-screenrecording" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >"$TEST_RECORDING_ARGS_LOG"
